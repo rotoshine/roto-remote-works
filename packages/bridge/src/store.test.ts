@@ -31,3 +31,59 @@ describe("Store — comments", () => {
     expect(await store.listComments()).toEqual([c]);
   });
 });
+
+describe("Store — patch / delete / clear", () => {
+  it("patches a comment's status and returns the updated comment", async () => {
+    const { store } = await tempStore();
+    const c = await store.addComment({ comment: "x" });
+    const updated = await store.patchComment(c.id, { status: "resolved" });
+    expect(updated?.status).toBe("resolved");
+    expect((await store.listComments())[0]?.status).toBe("resolved");
+  });
+
+  it("patchComment returns null for an unknown id", async () => {
+    const { store } = await tempStore();
+    expect(await store.patchComment("nope", { status: "resolved" })).toBeNull();
+  });
+
+  it("deletes a comment and returns true", async () => {
+    const { store } = await tempStore();
+    const c = await store.addComment({ comment: "x" });
+    expect(await store.deleteComment(c.id)).toBe(true);
+    expect(await store.listComments()).toEqual([]);
+  });
+
+  it("deleteComment returns false for an unknown id", async () => {
+    const { store } = await tempStore();
+    expect(await store.deleteComment("nope")).toBe(false);
+  });
+
+  it("clears all comments", async () => {
+    const { store } = await tempStore();
+    await store.addComment({ comment: "a" });
+    await store.addComment({ comment: "b" });
+    await store.clearComments();
+    expect(await store.listComments()).toEqual([]);
+  });
+});
+
+describe("Store — persistence & concurrency", () => {
+  it("persists comments across Store instances (reload from file)", async () => {
+    const { store, dir } = await tempStore();
+    await store.addComment({ comment: "kept" });
+
+    const reopened = new Store({ file: join(dir, "comments.json") });
+    const list = await reopened.listComments();
+
+    expect(list).toHaveLength(1);
+    expect(list[0]?.comment).toBe("kept");
+  });
+
+  it("serializes concurrent writes without losing data", async () => {
+    const { store } = await tempStore();
+    await Promise.all(
+      Array.from({ length: 20 }, (_, i) => store.addComment({ comment: `c${i}` })),
+    );
+    expect(await store.listComments()).toHaveLength(20);
+  });
+});
