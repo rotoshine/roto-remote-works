@@ -23,6 +23,8 @@ export interface Comment {
   component: string | null;
   source: string | null;
   rect: Rect | null;
+  /** Relative path to the saved screenshot (e.g. "screenshots/<id>.png"), or null. */
+  screenshot?: string | null;
   createdAt: string;
 }
 
@@ -36,6 +38,8 @@ export interface NewComment {
   component?: string | null;
   source?: string | null;
   rect?: Rect | null;
+  /** A PNG data URL ("data:image/png;base64,…") captured at comment time. */
+  screenshot?: string | null;
 }
 
 export interface CommentPatch {
@@ -159,13 +163,32 @@ export class Store {
         component: input.component ?? null,
         source: input.source ?? null,
         rect: input.rect ?? null,
+        screenshot: null,
         createdAt: this.now(),
       };
+      if (input.screenshot) {
+        const ref = await this.saveScreenshot(comment.id, input.screenshot);
+        if (ref) comment.screenshot = ref;
+      }
       const list = await this.readComments();
       list.push(comment);
       await this.writeComments(list);
       return comment;
     });
+  }
+
+  private async saveScreenshot(id: string, dataUrl: string): Promise<string | null> {
+    const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+    if (!m) return null;
+    const rel = `screenshots/${id}.png`;
+    const file = this.path(rel);
+    await fs.mkdir(dirname(file), { recursive: true });
+    await fs.writeFile(file, Buffer.from(m[1]!, "base64"));
+    return rel;
+  }
+
+  getScreenshot(id: string): Promise<Buffer | null> {
+    return fs.readFile(this.path(`screenshots/${id}.png`)).catch(() => null);
   }
 
   patchComment(id: string, patch: CommentPatch): Promise<Comment | null> {

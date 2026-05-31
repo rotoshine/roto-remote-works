@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { BridgeClient } from "./client";
 import type { ApplyOrigin, Comment, Question, Status } from "./types";
 import { capture, type Captured } from "./selector";
+import { submitComment } from "./submit";
 import { WebAskModal } from "./WebAskModal";
 import { ProgressPanel } from "./ProgressPanel";
 
@@ -9,13 +10,20 @@ export interface DesignCommentOverlayProps {
   client: BridgeClient;
   pollMs?: number;
   origin?: ApplyOrigin;
+  /** Optional screenshot capture; result (PNG data URL) is attached to comments. */
+  captureScreenshot?: () => Promise<string | null>;
 }
 
 const IDLE: Status = { state: "idle", currentStep: null, perComment: {}, updatedAt: "" };
 
 type Draft = Captured & { px: number; py: number };
 
-export function DesignCommentOverlay({ client, pollMs = 1500, origin = "local" }: DesignCommentOverlayProps) {
+export function DesignCommentOverlay({
+  client,
+  pollMs = 1500,
+  origin = "local",
+  captureScreenshot,
+}: DesignCommentOverlayProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [status, setStatus] = useState<Status>(IDLE);
   const [question, setQuestion] = useState<Question | null>(null);
@@ -78,21 +86,11 @@ export function DesignCommentOverlay({ client, pollMs = 1500, origin = "local" }
 
   const submitDraft = useCallback(async () => {
     if (!draft || !draftText.trim()) return;
-    await client.addComment({
-      comment: draftText.trim(),
-      url: typeof location !== "undefined" ? location.pathname + location.search : "",
-      selector: draft.selector,
-      text: draft.text,
-      tag: draft.tag,
-      classes: draft.classes,
-      component: draft.component,
-      source: draft.source,
-      rect: draft.rect,
-    });
+    await submitComment(client, draft, draftText.trim(), captureScreenshot);
     setDraft(null);
     setDraftText("");
     void poll();
-  }, [client, draft, draftText, poll]);
+  }, [client, draft, draftText, captureScreenshot, poll]);
 
   const requestApply = useCallback(async () => {
     await client.apply(origin);

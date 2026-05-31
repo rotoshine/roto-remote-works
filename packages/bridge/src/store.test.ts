@@ -88,6 +88,33 @@ describe("Store — persistence & concurrency", () => {
   });
 });
 
+describe("Store — screenshots", () => {
+  it("saves an attached PNG and serves it via getScreenshot, keeping bytes out of comments.json", async () => {
+    const { store } = await tempStore();
+    const dataUrl = "data:image/png;base64," + Buffer.from("PNGBYTES").toString("base64");
+
+    const c = await store.addComment({ comment: "spacing off", screenshot: dataUrl });
+
+    expect(c.screenshot).toBe(`screenshots/${c.id}.png`);
+    expect(JSON.stringify(await store.listComments())).not.toContain("base64");
+    expect((await store.getScreenshot(c.id))?.toString()).toBe("PNGBYTES");
+  });
+
+  it("a comment without a screenshot has screenshot=null", async () => {
+    const { store } = await tempStore();
+    const c = await store.addComment({ comment: "x" });
+    expect(c.screenshot ?? null).toBeNull();
+    expect(await store.getScreenshot(c.id)).toBeNull();
+  });
+
+  it("ignores a non-PNG-dataURL screenshot value", async () => {
+    const { store } = await tempStore();
+    const c = await store.addComment({ comment: "x", screenshot: "not-a-data-url" });
+    expect(c.screenshot ?? null).toBeNull();
+    expect(await store.getScreenshot(c.id)).toBeNull();
+  });
+});
+
 describe("Store — apply / request", () => {
   it("requestApply queues open comments and records a request with origin + ids", async () => {
     const { store } = await tempStore();

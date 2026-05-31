@@ -16,6 +16,7 @@ export interface AgentClient {
   postQuestion(input: { text: string; options?: string[] }): Promise<Question>;
   currentQuestion(): Promise<Question | null>;
   cancelQuestion(id: string): Promise<Question | null>;
+  getScreenshot(id: string): Promise<Uint8Array | null>;
 }
 
 export interface AgentClientOptions {
@@ -51,5 +52,12 @@ export function createAgentClient(opts: AgentClientOptions): AgentClient {
     postQuestion: (input) => request<Question>("POST", "/question", input),
     currentQuestion: () => request<Question | null>("GET", "/question/current"),
     cancelQuestion: (id) => request<Question | null>("POST", `/question/${id}/cancel`),
+    getScreenshot: async (id) => {
+      const res = await fetchFn(`${base}/comments/${id}/screenshot`, {
+        headers: { authorization: `Bearer ${opts.token}` },
+      });
+      if (!res.ok) return null;
+      return new Uint8Array(await res.arrayBuffer());
+    },
   };
 }

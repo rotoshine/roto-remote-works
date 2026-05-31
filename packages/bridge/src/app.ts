@@ -40,6 +40,11 @@ export function createApp(opts: AppOptions): Hono {
     const updated = await store.patchComment(c.req.param("id"), body);
     return updated ? c.json(updated) : c.json({ error: "not found" }, 404);
   });
+  app.get("/comments/:id/screenshot", async (c) => {
+    const buf = await store.getScreenshot(c.req.param("id"));
+    if (!buf) return c.json({ error: "not found" }, 404);
+    return c.body(new Uint8Array(buf), 200, { "content-type": "image/png" });
+  });
   app.delete("/comments/:id", async (c) => {
     const ok = await store.deleteComment(c.req.param("id"));
     return ok ? c.json({ ok: true }) : c.json({ error: "not found" }, 404);

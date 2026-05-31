@@ -33,7 +33,9 @@ Claude will: clone the tool → build & **vendor the overlay** (a self-contained
   default, remote behind a private tunnel.
 - **overlay** (`packages/overlay`, React+Vite+Tailwind) — vendored into your app;
   renders in a **Shadow DOM** with its own styles (blue theme). Fiber → source
-  `file:line`.
+  `file:line`, and captures a **viewport screenshot** with each comment
+  (lazy html2canvas) so loose visual feedback ("여기 간격 이상") still gives the
+  agent something to *see*.
 - **agent** (`packages/agent`) — the `rrw` CLI + the `rrw-process` skill the
   Claude session uses to apply comments, report progress, and ask via the web.
 

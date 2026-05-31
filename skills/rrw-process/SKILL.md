@@ -30,10 +30,17 @@ truth; you talk to it through the `rrw` CLI (provided by setup — see the proje
    rrw status --state applying --step "시작"
    ```
 
-4. **For each comment** (`id`, `selector`, `source`, `classes`, `text`, `comment`):
+4. **For each comment** (`id`, `selector`, `source`, `classes`, `text`, `comment`,
+   `screenshot`):
    ```bash
    rrw comment <id> applying
    ```
+   - **If `screenshot` is set, download and view it** — designers leave loose,
+     visual comments ("여기 간격 이상", "디자인 안 맞음"), so the image is the real
+     context:
+     ```bash
+     rrw screenshot <id> /tmp/rrw-<id>.png   # then open / Read the PNG
+     ```
    - Locate the code: prefer `source` (`file:line:col`, from the React fiber);
      otherwise use `selector` + `classes` + `text` to find the JSX.
    - Make the edit. **Follow the installed React skills** (e.g.

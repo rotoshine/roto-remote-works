@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import type { AgentClient } from "./client";
 import type { ApplyRequest, Comment, CommentStatus, RunState, Status } from "@rrw/bridge";
 
@@ -30,4 +31,12 @@ export async function cmdPull(
 ): Promise<{ request: ApplyRequest | null; comments: Comment[] }> {
   const [request, all] = await Promise.all([client.getRequest(), client.listComments()]);
   return { request, comments: all.filter((c) => c.status !== "resolved") };
+}
+
+/** Downloads a comment's screenshot to a local file (so the agent can view it). */
+export async function cmdScreenshot(client: AgentClient, id: string, outPath: string): Promise<string | null> {
+  const bytes = await client.getScreenshot(id);
+  if (!bytes) return null;
+  await writeFile(outPath, bytes);
+  return outPath;
 }

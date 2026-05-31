@@ -88,6 +88,19 @@ describe("bridge app — comments", () => {
     expect((await call("/comments", { method: "DELETE" })).status).toBe(200);
     expect(await data(await call("/comments"))).toEqual([]);
   });
+
+  it("serves an attached screenshot as PNG (404 when none)", async () => {
+    const { json, call } = await setup();
+    const dataUrl = "data:image/png;base64," + Buffer.from("PNGBYTES").toString("base64");
+    const withShot = await data(await json("/comments", "POST", { comment: "x", screenshot: dataUrl }));
+    const res = await call(`/comments/${withShot.id}/screenshot`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("image/png");
+    expect(await res.text()).toBe("PNGBYTES");
+
+    const noShot = await data(await json("/comments", "POST", { comment: "y" }));
+    expect((await call(`/comments/${noShot.id}/screenshot`)).status).toBe(404);
+  });
 });
 
 describe("bridge app — apply / status / question", () => {

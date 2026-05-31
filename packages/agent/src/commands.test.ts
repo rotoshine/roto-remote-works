@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { cmdStatus, cmdComment, cmdResolve, cmdDone, cmdPull } from "./commands";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { cmdStatus, cmdComment, cmdResolve, cmdDone, cmdPull, cmdScreenshot } from "./commands";
 import type { AgentClient } from "./client";
 import type { Comment, CommentStatus, Status } from "@rrw/bridge";
 
@@ -22,6 +25,7 @@ function fakeAgentClient(over: Partial<AgentClient>): AgentClient {
     postQuestion: async () => ({ id: "q", text: "", options: [], status: "pending", answer: null, askedAt: "t" }),
     currentQuestion: async () => null,
     cancelQuestion: async () => null,
+    getScreenshot: async () => null,
     ...over,
   };
 }
@@ -65,5 +69,19 @@ describe("agent commands", () => {
     const r = await cmdPull(client);
     expect(r.request?.ids).toEqual(["c1"]);
     expect(r.comments.map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("screenshot downloads the bytes to a file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "rrw-shot-"));
+    const out = join(dir, "s.png");
+    const client = fakeAgentClient({ getScreenshot: async () => new Uint8Array([1, 2, 3]) });
+    const r = await cmdScreenshot(client, "c1", out);
+    expect(r).toBe(out);
+    expect([...(await readFile(out))]).toEqual([1, 2, 3]);
+  });
+
+  it("screenshot returns null when there is none", async () => {
+    const client = fakeAgentClient({ getScreenshot: async () => null });
+    expect(await cmdScreenshot(client, "c1", join(tmpdir(), "none.png"))).toBeNull();
   });
 });

@@ -17,6 +17,7 @@ function fakeAgentClient(over: Partial<AgentClient>): AgentClient {
     postQuestion: async () => q("q1", "pending"),
     currentQuestion: async () => null,
     cancelQuestion: async () => null,
+    getScreenshot: async () => null,
     ...over,
   };
 }

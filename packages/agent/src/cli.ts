@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createAgentClient } from "./client";
-import { cmdStatus, cmdComment, cmdResolve, cmdDone, cmdPull } from "./commands";
+import { cmdStatus, cmdComment, cmdResolve, cmdDone, cmdPull, cmdScreenshot } from "./commands";
 import { askQuestion } from "./ask";
 import type { CommentStatus, RunState } from "@rrw/bridge";
 
@@ -56,6 +56,15 @@ async function main(): Promise<void> {
     case "resolve":
       await cmdResolve(client, positionals[0]!);
       break;
+    case "screenshot": {
+      const path = await cmdScreenshot(client, positionals[0]!, positionals[1]!);
+      if (path) console.log(path);
+      else {
+        console.error("no screenshot for that comment");
+        process.exit(2);
+      }
+      break;
+    }
     case "done":
       await cmdDone(client);
       break;
@@ -74,7 +83,7 @@ async function main(): Promise<void> {
       break;
     }
     default:
-      console.error("usage: rrw <pull|status|comment|resolve|done|ask> [args]");
+      console.error("usage: rrw <pull|status|comment|resolve|screenshot|done|ask> [args]");
       process.exit(1);
   }
 }

@@ -15,6 +15,10 @@ export default defineConfig({
     },
     rollupOptions: {
       external: ["react", "react-dom", "react/jsx-runtime", "react-dom/client"],
+      output: {
+        // keep a single vendorable file even though html2canvas is dynamically imported
+        inlineDynamicImports: true,
+      },
     },
   },
 });

@@ -1,6 +1,7 @@
 import { createRoot, type Root } from "react-dom/client";
 import { createClient, type BridgeClient } from "./client";
 import { DesignCommentOverlay } from "./DesignCommentOverlay";
+import { captureScreenshot as defaultCapture } from "./capture-screenshot";
 import type { ApplyOrigin } from "./types";
 import overlayCss from "./styles.css?inline";
 
@@ -13,6 +14,8 @@ export interface MountConfig {
   target?: HTMLElement;
   /** Inject a client (testing); otherwise built from bridgeUrl + token. */
   client?: BridgeClient;
+  /** Override screenshot capture (default: html2canvas viewport capture). */
+  captureScreenshot?: () => Promise<string | null>;
 }
 
 /**
@@ -41,7 +44,14 @@ export function mountOverlay(config: MountConfig = {}): () => void {
     createClient({ baseUrl: config.bridgeUrl ?? "http://localhost:4317", token: config.token ?? "" });
 
   const root: Root = createRoot(mountPoint);
-  root.render(<DesignCommentOverlay client={client} pollMs={config.pollMs} origin={config.origin} />);
+  root.render(
+    <DesignCommentOverlay
+      client={client}
+      pollMs={config.pollMs}
+      origin={config.origin}
+      captureScreenshot={config.captureScreenshot ?? defaultCapture}
+    />,
+  );
 
   return () => {
     root.unmount();
