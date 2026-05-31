@@ -1,0 +1,212 @@
+import { useCallback, useEffect, useState } from "react";
+import type { BridgeClient } from "./client";
+import type { ApplyOrigin, Comment, Question, Status } from "./types";
+import { capture, type Captured } from "./selector";
+import { WebAskModal } from "./WebAskModal";
+import { ProgressPanel } from "./ProgressPanel";
+
+export interface DesignCommentOverlayProps {
+  client: BridgeClient;
+  pollMs?: number;
+  origin?: ApplyOrigin;
+}
+
+const IDLE: Status = { state: "idle", currentStep: null, perComment: {}, updatedAt: "" };
+
+type Draft = Captured & { px: number; py: number };
+
+export function DesignCommentOverlay({ client, pollMs = 1500, origin = "local" }: DesignCommentOverlayProps) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [status, setStatus] = useState<Status>(IDLE);
+  const [question, setQuestion] = useState<Question | null>(null);
+  const [mode, setMode] = useState<"off" | "selecting">("off");
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draftText, setDraftText] = useState("");
+
+  const poll = useCallback(async () => {
+    try {
+      const [c, s, q] = await Promise.all([
+        client.listComments(),
+        client.getStatus(),
+        client.getQuestion(),
+      ]);
+      setComments(c);
+      setStatus(s);
+      setQuestion(q);
+    } catch {
+      /* bridge unreachable — keep last known state */
+    }
+  }, [client]);
+
+  useEffect(() => {
+    void poll();
+    const t = setInterval(() => void poll(), pollMs);
+    return () => clearInterval(t);
+  }, [poll, pollMs]);
+
+  const active = comments.filter((c) => c.status !== "resolved");
+  const open = active.filter((c) => c.status === "open");
+  const running = status.state === "applying" || status.state === "queued";
+
+  // comment-mode: click an element on the host page to start a draft
+  useEffect(() => {
+    if (mode !== "selecting") return;
+    const isUi = (t: EventTarget | null) => t instanceof Element && !!t.closest("[data-rrw-ui]");
+    const onClick = (e: MouseEvent) => {
+      if (isUi(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el || isUi(el)) return;
+      setDraft({ ...capture(el), px: e.clientX, py: e.clientY });
+      setDraftText("");
+      setMode("off");
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMode("off");
+    };
+    document.addEventListener("click", onClick, true);
+    document.addEventListener("keydown", onKey, true);
+    document.body.style.cursor = "crosshair";
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      document.removeEventListener("keydown", onKey, true);
+      document.body.style.cursor = "";
+    };
+  }, [mode]);
+
+  const submitDraft = useCallback(async () => {
+    if (!draft || !draftText.trim()) return;
+    await client.addComment({
+      comment: draftText.trim(),
+      url: typeof location !== "undefined" ? location.pathname + location.search : "",
+      selector: draft.selector,
+      text: draft.text,
+      tag: draft.tag,
+      classes: draft.classes,
+      component: draft.component,
+      source: draft.source,
+      rect: draft.rect,
+    });
+    setDraft(null);
+    setDraftText("");
+    void poll();
+  }, [client, draft, draftText, poll]);
+
+  const requestApply = useCallback(async () => {
+    await client.apply(origin);
+    void poll();
+  }, [client, origin, poll]);
+
+  const answer = useCallback(
+    async (value: string) => {
+      if (!question) return;
+      await client.answer(question.id, value);
+      setQuestion(null);
+      void poll();
+    },
+    [client, question, poll],
+  );
+
+  const cancelQuestion = useCallback(async () => {
+    if (!question) return;
+    await client.cancel(question.id);
+    setQuestion(null);
+    void poll();
+  }, [client, question, poll]);
+
+  return (
+    <div data-rrw-ui className="rrw-root">
+      {question && question.status === "pending" && (
+        <div className="rrw-backdrop">
+          <WebAskModal question={question} onAnswer={answer} onCancel={cancelQuestion} />
+        </div>
+      )}
+
+      {running && (
+        <div className="rrw-dock rrw-dock-progress">
+          <ProgressPanel status={status} comments={active} />
+        </div>
+      )}
+
+      {draft && (
+        <div className="rrw-card rrw-draft" style={{ left: draft.px, top: draft.py + 12 }}>
+          <div className="rrw-draft-meta">
+            {draft.tag}
+            {draft.component ? ` · <${draft.component}>` : ""}
+          </div>
+          <textarea
+            className="rrw-input"
+            value={draftText}
+            onChange={(e) => setDraftText(e.target.value)}
+            placeholder="이 요소 수정 요청…"
+            rows={3}
+          />
+          <div className="rrw-row">
+            <button className="rrw-btn rrw-btn-ghost" type="button" onClick={() => setDraft(null)}>
+              취소
+            </button>
+            <button
+              className="rrw-btn rrw-btn-primary"
+              type="button"
+              onClick={() => void submitDraft()}
+              disabled={!draftText.trim()}
+            >
+              저장
+            </button>
+          </div>
+        </div>
+      )}
+
+      {panelOpen && (
+        <div className="rrw-card rrw-panel">
+          <div className="rrw-panel-head">
+            <strong>코멘트 {active.length}개</strong>
+            {active.length > 0 && !running && (
+              <button
+                className="rrw-btn rrw-btn-ghost"
+                type="button"
+                onClick={async () => {
+                  await client.clearComments();
+                  void poll();
+                }}
+              >
+                지우기
+              </button>
+            )}
+          </div>
+          {open.length > 0 && (
+            <button
+              className="rrw-btn rrw-btn-primary rrw-panel-apply"
+              type="button"
+              onClick={() => void requestApply()}
+              disabled={running}
+            >
+              {running ? "🤖 처리 중…" : `🤖 Claude에게 수정 요청 (${open.length})`}
+            </button>
+          )}
+          <ul className="rrw-panel-list">
+            {active.map((c) => (
+              <li key={c.id} className="rrw-panel-item">
+                {c.comment}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <button
+        className="rrw-fab"
+        data-rrw-ui
+        type="button"
+        onClick={() => {
+          setMode(mode === "selecting" ? "off" : "selecting");
+          setPanelOpen(true);
+        }}
+      >
+        {mode === "selecting" ? "✕ 취소" : "＋ 코멘트"}
+      </button>
+    </div>
+  );
+}

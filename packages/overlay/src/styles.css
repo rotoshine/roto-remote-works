@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* All overlay styles are scoped to the shadow root, authored with Tailwind.
+   Primary color is blue (see tailwind.config.js). */
+@layer components {
+  .rrw-root {
+    @apply fixed inset-0 z-[2147483000] text-sm;
+    pointer-events: none;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+
+  .rrw-fab {
+    @apply fixed bottom-4 right-4 inline-flex h-10 items-center rounded-full bg-primary px-4 font-bold text-primary-fg shadow-lg;
+    pointer-events: auto;
+    cursor: pointer;
+    border: 0;
+  }
+
+  .rrw-card {
+    @apply fixed rounded-xl border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl;
+    pointer-events: auto;
+  }
+
+  .rrw-panel {
+    @apply bottom-16 right-4 flex w-72 flex-col gap-2 overflow-auto;
+    max-height: 60vh;
+  }
+  .rrw-panel-head {
+    @apply flex items-center justify-between;
+  }
+  .rrw-panel-apply {
+    @apply w-full;
+  }
+  .rrw-panel-list {
+    @apply m-0 flex list-none flex-col gap-1 p-0;
+  }
+  .rrw-panel-item {
+    @apply border-t border-slate-100 pt-1 text-slate-700;
+  }
+
+  .rrw-draft {
+    @apply flex w-72 flex-col gap-2 border-blue-500;
+  }
+  .rrw-draft-meta {
+    @apply text-xs text-slate-500;
+  }
+
+  .rrw-dock {
+    @apply fixed bottom-16 right-4 w-72;
+    pointer-events: auto;
+  }
+
+  .rrw-backdrop {
+    @apply fixed inset-0 grid place-items-center;
+    background: rgba(0, 0, 0, 0.4);
+    pointer-events: auto;
+  }
+
+  .rrw-webask {
+    @apply flex w-80 flex-col gap-3;
+  }
+  .rrw-webask-text {
+    @apply m-0 font-medium;
+  }
+  .rrw-webask-options {
+    @apply flex flex-wrap gap-2;
+  }
+  .rrw-webask-form {
+    @apply flex gap-2;
+  }
+
+  .rrw-progress {
+    @apply flex flex-col gap-2;
+  }
+  .rrw-progress-step {
+    @apply m-0 text-xs font-semibold text-blue-700;
+  }
+  .rrw-progress-list {
+    @apply m-0 flex list-none flex-col gap-1 p-0;
+  }
+  .rrw-progress-item {
+    @apply flex items-center justify-between gap-2;
+  }
+  .rrw-progress-label {
+    @apply truncate text-slate-700;
+  }
+
+  .rrw-btn {
+    @apply cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold;
+    border: 0;
+  }
+  .rrw-btn-primary {
+    @apply bg-primary text-primary-fg;
+  }
+  .rrw-btn-ghost {
+    @apply border border-slate-300 bg-transparent text-slate-600;
+  }
+  .rrw-input {
+    @apply w-full rounded-md border border-slate-300 p-2 text-sm;
+  }
+  .rrw-row {
+    @apply mt-2 flex justify-end gap-2;
+  }
+
+  .rrw-badge {
+    @apply rounded-full px-2 py-0.5 text-[10px] font-bold;
+  }
+  .rrw-badge-applying {
+    @apply bg-amber-100 text-amber-800;
+  }
+  .rrw-badge-resolved {
+    @apply bg-emerald-100 text-emerald-800;
+  }
+  .rrw-badge-open,
+  .rrw-badge-queued {
+    @apply bg-slate-100 text-slate-600;
+  }
+}
