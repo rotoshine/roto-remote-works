@@ -1,5 +1,5 @@
 import { promises as fs } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 export type CommentStatus = "open" | "queued" | "applying" | "resolved";
@@ -43,6 +43,45 @@ export interface CommentPatch {
   comment?: string;
 }
 
+export type ApplyOrigin = "local" | "remote";
+
+export interface ApplyRequest {
+  requestedAt: string;
+  origin: ApplyOrigin;
+  ids: string[];
+}
+
+export type RunState = "idle" | "queued" | "applying" | "done" | "error";
+
+export interface Status {
+  state: RunState;
+  currentStep: string | null;
+  perComment: Record<string, CommentStatus>;
+  updatedAt: string;
+}
+
+export interface StatusPatch {
+  state?: RunState;
+  currentStep?: string | null;
+  perComment?: Record<string, CommentStatus>;
+}
+
+export type QuestionStatus = "pending" | "answered" | "cancelled";
+
+export interface Question {
+  id: string;
+  text: string;
+  options: string[];
+  status: QuestionStatus;
+  answer: string | null;
+  askedAt: string;
+}
+
+export interface NewQuestion {
+  text: string;
+  options?: string[];
+}
+
 export interface StoreOptions {
   file: string;
   id?: () => string;
@@ -51,6 +90,7 @@ export interface StoreOptions {
 
 export class Store {
   private readonly file: string;
+  private readonly dir: string;
   private readonly genId: () => string;
   private readonly now: () => string;
   /** Serializes read-modify-write operations to avoid lost updates. */
@@ -58,8 +98,13 @@ export class Store {
 
   constructor(opts: StoreOptions) {
     this.file = opts.file;
+    this.dir = dirname(opts.file);
     this.genId = opts.id ?? (() => randomUUID());
     this.now = opts.now ?? (() => new Date().toISOString());
+  }
+
+  private path(name: string): string {
+    return join(this.dir, name);
   }
 
   private mutate<T>(fn: () => Promise<T>): Promise<T> {
@@ -69,6 +114,31 @@ export class Store {
       () => undefined,
     );
     return run;
+  }
+
+  private async readJson<T>(file: string, fallback: T): Promise<T> {
+    try {
+      return JSON.parse(await fs.readFile(file, "utf8")) as T;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private async writeJson(file: string, value: unknown): Promise<void> {
+    await fs.mkdir(dirname(file), { recursive: true });
+    const tmp = `${file}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(value, null, 2));
+    await fs.rename(tmp, file);
+  }
+
+  // ── comments ──────────────────────────────────────────────
+  private async readComments(): Promise<Comment[]> {
+    const parsed = await this.readJson<unknown>(this.file, []);
+    return Array.isArray(parsed) ? (parsed as Comment[]) : [];
+  }
+
+  private writeComments(list: Comment[]): Promise<void> {
+    return this.writeJson(this.file, list);
   }
 
   async listComments(): Promise<Comment[]> {
@@ -128,20 +198,99 @@ export class Store {
     });
   }
 
-  private async readComments(): Promise<Comment[]> {
-    try {
-      const raw = await fs.readFile(this.file, "utf8");
-      const parsed: unknown = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as Comment[]) : [];
-    } catch {
-      return [];
-    }
+  // ── apply / request ───────────────────────────────────────
+  requestApply(origin: ApplyOrigin): Promise<ApplyRequest | null> {
+    return this.mutate(async () => {
+      const list = await this.readComments();
+      const open = list.filter((c) => c.status === "open");
+      if (open.length === 0) return null;
+      for (const c of list) if (c.status === "open") c.status = "queued";
+      await this.writeComments(list);
+      const req: ApplyRequest = {
+        requestedAt: this.now(),
+        origin,
+        ids: open.map((c) => c.id),
+      };
+      await this.writeJson(this.path("request.json"), req);
+      return req;
+    });
   }
 
-  private async writeComments(list: Comment[]): Promise<void> {
-    await fs.mkdir(dirname(this.file), { recursive: true });
-    const tmp = `${this.file}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify(list, null, 2));
-    await fs.rename(tmp, this.file);
+  getRequest(): Promise<ApplyRequest | null> {
+    return this.readJson<ApplyRequest | null>(this.path("request.json"), null);
+  }
+
+  clearRequest(): Promise<void> {
+    return this.mutate(async () => {
+      await this.writeJson(this.path("request.json"), null);
+    });
+  }
+
+  // ── status (progress) ─────────────────────────────────────
+  private defaultStatus(): Status {
+    return { state: "idle", currentStep: null, perComment: {}, updatedAt: this.now() };
+  }
+
+  getStatus(): Promise<Status> {
+    return this.readJson<Status>(this.path("status.json"), this.defaultStatus());
+  }
+
+  setStatus(patch: StatusPatch): Promise<Status> {
+    return this.mutate(async () => {
+      const cur = await this.readJson<Status>(this.path("status.json"), this.defaultStatus());
+      const next: Status = {
+        state: patch.state ?? cur.state,
+        currentStep: patch.currentStep !== undefined ? patch.currentStep : cur.currentStep,
+        perComment: { ...cur.perComment, ...(patch.perComment ?? {}) },
+        updatedAt: this.now(),
+      };
+      await this.writeJson(this.path("status.json"), next);
+      return next;
+    });
+  }
+
+  // ── question (web-ask) ────────────────────────────────────
+  postQuestion(input: NewQuestion): Promise<Question> {
+    return this.mutate(async () => {
+      const q: Question = {
+        id: this.genId(),
+        text: input.text,
+        options: input.options ?? [],
+        status: "pending",
+        answer: null,
+        askedAt: this.now(),
+      };
+      await this.writeJson(this.path("question.json"), q);
+      return q;
+    });
+  }
+
+  currentQuestion(): Promise<Question | null> {
+    return this.readJson<Question | null>(this.path("question.json"), null);
+  }
+
+  async getQuestion(): Promise<Question | null> {
+    const q = await this.currentQuestion();
+    return q && q.status === "pending" ? q : null;
+  }
+
+  answerQuestion(id: string, answer: string): Promise<Question | null> {
+    return this.mutate(async () => {
+      const q = await this.readJson<Question | null>(this.path("question.json"), null);
+      if (!q || q.id !== id || q.status !== "pending") return null;
+      const next: Question = { ...q, status: "answered", answer };
+      await this.writeJson(this.path("question.json"), next);
+      return next;
+    });
+  }
+
+  cancelQuestion(id: string): Promise<Question | null> {
+    return this.mutate(async () => {
+      const q = await this.readJson<Question | null>(this.path("question.json"), null);
+      if (!q || q.id !== id) return null;
+      const next: Question = { ...q, status: "cancelled" };
+      await this.writeJson(this.path("question.json"), next);
+      return next;
+    });
   }
 }

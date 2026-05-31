@@ -87,3 +87,94 @@ describe("Store — persistence & concurrency", () => {
     expect(await store.listComments()).toHaveLength(20);
   });
 });
+
+describe("Store — apply / request", () => {
+  it("requestApply queues open comments and records a request with origin + ids", async () => {
+    const { store } = await tempStore();
+    const a = await store.addComment({ comment: "a" });
+    await store.patchComment(a.id, { status: "resolved" });
+    const b = await store.addComment({ comment: "b" });
+
+    const req = await store.requestApply("local");
+
+    expect(req?.origin).toBe("local");
+    expect(req?.ids).toEqual([b.id]);
+    const list = await store.listComments();
+    expect(list.find((c) => c.id === b.id)?.status).toBe("queued");
+    expect(list.find((c) => c.id === a.id)?.status).toBe("resolved");
+    expect((await store.getRequest())?.ids).toEqual([b.id]);
+  });
+
+  it("requestApply returns null when there are no open comments", async () => {
+    const { store } = await tempStore();
+    expect(await store.requestApply("local")).toBeNull();
+    expect(await store.getRequest()).toBeNull();
+  });
+
+  it("clearRequest removes the pending request", async () => {
+    const { store } = await tempStore();
+    await store.addComment({ comment: "x" });
+    await store.requestApply("remote");
+    await store.clearRequest();
+    expect(await store.getRequest()).toBeNull();
+  });
+});
+
+describe("Store — status (progress)", () => {
+  it("defaults to idle", async () => {
+    const { store } = await tempStore();
+    const s = await store.getStatus();
+    expect(s.state).toBe("idle");
+    expect(s.currentStep).toBeNull();
+    expect(s.perComment).toEqual({});
+  });
+
+  it("merges status patches (perComment accumulates)", async () => {
+    const { store } = await tempStore();
+    await store.setStatus({ state: "applying", currentStep: "fixing header", perComment: { c1: "applying" } });
+    await store.setStatus({ perComment: { c2: "resolved" } });
+
+    const s = await store.getStatus();
+    expect(s.state).toBe("applying");
+    expect(s.currentStep).toBe("fixing header");
+    expect(s.perComment).toEqual({ c1: "applying", c2: "resolved" });
+  });
+});
+
+describe("Store — question (web-ask)", () => {
+  it("postQuestion creates a pending question that getQuestion returns", async () => {
+    const { store } = await tempStore();
+    const q = await store.postQuestion({ text: "Which color?", options: ["blue", "red"] });
+    expect(q.status).toBe("pending");
+    expect(q.answer).toBeNull();
+
+    const pending = await store.getQuestion();
+    expect(pending?.id).toBe(q.id);
+    expect(pending?.options).toEqual(["blue", "red"]);
+  });
+
+  it("answerQuestion records the answer, marks answered, and clears pending", async () => {
+    const { store } = await tempStore();
+    const q = await store.postQuestion({ text: "x" });
+
+    const answered = await store.answerQuestion(q.id, "blue");
+    expect(answered?.status).toBe("answered");
+    expect(answered?.answer).toBe("blue");
+    expect(await store.getQuestion()).toBeNull();
+    expect((await store.currentQuestion())?.answer).toBe("blue");
+  });
+
+  it("answerQuestion returns null for an unknown id", async () => {
+    const { store } = await tempStore();
+    await store.postQuestion({ text: "x" });
+    expect(await store.answerQuestion("nope", "y")).toBeNull();
+  });
+
+  it("cancelQuestion marks it cancelled and clears pending", async () => {
+    const { store } = await tempStore();
+    const q = await store.postQuestion({ text: "x" });
+    await store.cancelQuestion(q.id);
+    expect(await store.getQuestion()).toBeNull();
+    expect((await store.currentQuestion())?.status).toBe("cancelled");
+  });
+});
