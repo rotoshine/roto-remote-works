@@ -1,12 +1,16 @@
 import { existsSync as nodeExists, readFileSync as nodeRead } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 
+export type RunMode = "session" | "worker";
+export type AgentKind = "claude" | "codex";
+
 export interface RrwConfigFile {
   bridgeUrl?: string;
   token?: string;
   author?: string;
   origin?: "local" | "remote";
   bridge?: { port?: number; host?: string; dataDir?: string };
+  processing?: { mode?: RunMode; agent?: AgentKind };
 }
 
 export interface ResolvedConfig {
@@ -15,6 +19,12 @@ export interface ResolvedConfig {
   author: string | null;
   origin: "local" | "remote";
   bridge: { port: number; host: string; dataDir: string };
+  /**
+   * How comments get applied:
+   * - `session`: the operator's interactive agent session (local dev / HMR).
+   * - `worker`: a standalone headless runner (`claude -p` / `codex exec`).
+   */
+  processing: { mode: RunMode; agent: AgentKind };
   /** Absolute path of the config file that was loaded, or null. */
   source: string | null;
 }
@@ -73,6 +83,8 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   const baseDir = source ? dirname(source) : cwd;
   const originRaw = env.RRW_ORIGIN ?? file.origin;
   const rawDataDir = env.RRW_DATA_DIR ?? file.bridge?.dataDir ?? ".rrw-data";
+  const modeRaw = env.RRW_MODE ?? file.processing?.mode;
+  const agentRaw = env.RRW_AGENT ?? file.processing?.agent;
 
   return {
     bridgeUrl: env.RRW_BRIDGE_URL ?? file.bridgeUrl ?? DEFAULT_BRIDGE_URL,
@@ -83,6 +95,10 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
       port: Number(env.RRW_PORT ?? file.bridge?.port ?? 4317),
       host: env.RRW_HOST ?? file.bridge?.host ?? "127.0.0.1",
       dataDir: isAbsolute(rawDataDir) ? rawDataDir : join(baseDir, rawDataDir),
+    },
+    processing: {
+      mode: modeRaw === "worker" ? "worker" : "session",
+      agent: agentRaw === "codex" ? "codex" : "claude",
     },
     source,
   };

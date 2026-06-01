@@ -1,22 +1,52 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { createAgentClient } from "./client";
+import { createAgentClient, type AgentClient } from "./client";
 import { cmdStatus, cmdComment, cmdResolve, cmdDone, cmdPull, cmdScreenshot } from "./commands";
 import { askQuestion } from "./ask";
 import { runWorkerLoop } from "./worker";
-import { agentCommand, type AgentKind } from "./runners";
+import { agentCommand, resolveRunner, type AgentKind, type RunMode } from "./runners";
 import { loadConfig } from "@rrw/config";
 import type { CommentStatus, RunState } from "@rrw/bridge";
 
-function config(): { baseUrl: string; token: string } {
-  // rrw.config.json (nearest ancestor) supplies bridgeUrl + token; env
-  // (RRW_BRIDGE_URL / RRW_TOKEN) overrides it.
+function config(): { baseUrl: string; token: string; processing: { mode: RunMode; agent: AgentKind } } {
+  // rrw.config.json (nearest ancestor) supplies bridgeUrl + token + processing
+  // mode; env (RRW_BRIDGE_URL / RRW_TOKEN / RRW_MODE / RRW_AGENT) overrides it.
   const cfg = loadConfig();
   if (!cfg.token) {
     console.error("token required: set it in rrw.config.json or the RRW_TOKEN env (the bridge token).");
     process.exit(1);
   }
-  return { baseUrl: cfg.bridgeUrl, token: cfg.token };
+  return { baseUrl: cfg.bridgeUrl, token: cfg.token, processing: cfg.processing };
+}
+
+/** Headless worker loop: poll the bridge and spawn the agent per request. */
+async function startWorker(
+  client: AgentClient,
+  baseUrl: string,
+  token: string,
+  kind: AgentKind,
+  pollMs: number,
+): Promise<void> {
+  const { cmd: aCmd, args: aArgs } = agentCommand(kind);
+  console.error(`[rrw worker] agent=${kind} bridge=${baseUrl} poll=${pollMs}ms (Ctrl+C to stop)`);
+  let stopping = false;
+  process.on("SIGINT", () => {
+    stopping = true;
+  });
+  await runWorkerLoop({
+    getRequest: () => client.getRequest(),
+    runAgent: () =>
+      new Promise<void>((resolve) => {
+        const child = spawn(aCmd, aArgs, {
+          stdio: "inherit",
+          env: { ...process.env, RRW_BRIDGE_URL: baseUrl, RRW_TOKEN: token },
+        });
+        child.on("close", () => resolve());
+        child.on("error", () => resolve());
+      }),
+    pollMs,
+    shouldStop: () => stopping,
+  });
 }
 
 function parseFlags(args: string[]): { positionals: string[]; flags: Record<string, string | boolean> } {
@@ -75,28 +105,30 @@ async function main(): Promise<void> {
       await cmdDone(client);
       break;
     case "worker": {
-      const kind: AgentKind = flags.agent === "codex" ? "codex" : "claude";
+      const { agent } = resolveRunner(cfg.processing, { mode: "worker", agent: flags.agent });
       const pollMs = typeof flags.poll === "string" ? Number(flags.poll) : 2000;
-      const { cmd: aCmd, args: aArgs } = agentCommand(kind);
-      console.error(`[rrw worker] agent=${kind} bridge=${cfg.baseUrl} poll=${pollMs}ms (Ctrl+C to stop)`);
-      let stopping = false;
-      process.on("SIGINT", () => {
-        stopping = true;
-      });
-      await runWorkerLoop({
-        getRequest: () => client.getRequest(),
-        runAgent: () =>
-          new Promise<void>((resolve) => {
-            const child = spawn(aCmd, aArgs, {
-              stdio: "inherit",
-              env: { ...process.env, RRW_BRIDGE_URL: cfg.baseUrl, RRW_TOKEN: cfg.token },
-            });
-            child.on("close", () => resolve());
-            child.on("error", () => resolve());
-          }),
-        pollMs,
-        shouldStop: () => stopping,
-      });
+      await startWorker(client, cfg.baseUrl, cfg.token, agent, pollMs);
+      break;
+    }
+    case "run": {
+      // Dispatch on the configured processing mode (flags override).
+      const { mode, agent } = resolveRunner(cfg.processing, { mode: flags.mode, agent: flags.agent });
+      if (mode === "worker") {
+        const pollMs = typeof flags.poll === "string" ? Number(flags.poll) : 2000;
+        await startWorker(client, cfg.baseUrl, cfg.token, agent, pollMs);
+      } else {
+        // session mode: nothing to daemonize — the operator's interactive agent
+        // session applies comments via the rrw-process skill (local/HMR).
+        const { comments } = await cmdPull(client);
+        const open = comments.filter((c) => c.status !== "resolved");
+        console.log(
+          `[rrw] session mode — your interactive ${agent} session applies comments via the rrw-process skill.`,
+        );
+        console.log(
+          `[rrw] ${open.length} comment(s) pending. Trigger rrw-process in your session (or use 'rrw pull'). ` +
+            `For an unattended/standalone bridge, set processing.mode="worker" (or run 'rrw worker').`,
+        );
+      }
       break;
     }
     case "ask": {
@@ -115,8 +147,9 @@ async function main(): Promise<void> {
     }
     default:
       console.error(
-        "usage: rrw <pull|status|comment|resolve|screenshot|done|ask|worker> [args]\n" +
-          "       rrw worker [--agent claude|codex] [--poll <ms>]",
+        "usage: rrw <pull|status|comment|resolve|screenshot|done|ask|run|worker> [args]\n" +
+          "       rrw run    [--mode session|worker] [--agent claude|codex] [--poll <ms>]\n" +
+          "       rrw worker [--agent claude|codex] [--poll <ms>]   # force headless",
       );
       process.exit(1);
   }

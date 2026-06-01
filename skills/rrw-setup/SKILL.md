@@ -63,9 +63,13 @@ can stay in env on a server).
   "bridgeUrl": "http://localhost:4317",
   "token": "<dev token — overlay & bridge must match>",
   "author": "your name",
+  "processing": { "mode": "session", "agent": "claude" },
   "bridge": { "port": 4317, "host": "127.0.0.1", "dataDir": ".rrw/.rrw-data" }
 }
 ```
+- **`processing.mode`**: `session` (default, local dev — the operator's interactive
+  agent applies via `rrw-process`) or `worker` (standalone/remote bridge — a headless
+  `claude -p`/`codex exec` applies per request). `rrw run` dispatches on it.
 - **Local**: keep `bridgeUrl` at localhost; set any `token` (overlay needs it client-side).
 - **Remote**: set `bridgeUrl` to the gated host (Tailscale/Cloudflare Access). Keep the
   real token **out of the committed file** — supply it via `RRW_TOKEN` on the bridge

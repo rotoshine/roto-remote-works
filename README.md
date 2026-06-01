@@ -88,6 +88,31 @@ the overlay + agent at that address:
 - `apply` is **operator-gated**; remote-origin requests are **review-then-apply**,
   never auto-applied.
 
+## Processing modes — who applies the comments
+
+Set `processing.mode` in `rrw.config.json` (or `RRW_MODE` / `rrw run --mode`):
+
+| mode | who applies | when | how edits land |
+|---|---|---|---|
+| `session` (default) | your **interactive** Claude/Codex session via the `rrw-process` skill | local dev (HMR) | saved files → HMR reflects instantly |
+| `worker` | a **headless** runner (`claude -p` / `codex exec`) spawned per request | standalone / remote bridge, no human attached | saved files on that host |
+
+```bash
+rrw run                 # dispatch on the configured mode
+rrw run --mode worker   # override for this run
+rrw worker --agent codex  # force headless (same as run --mode worker)
+```
+
+- **Local interactive** → keep `mode: "session"`. Don't spawn a second headless
+  agent on the repo you're editing (stdin/permission/concurrent-edit clashes).
+- **Standalone/remote bridge** → `mode: "worker"`, run `rrw run` (or `rrw worker`)
+  on a host that has the code checkout. `rrw ask` (web-ask) surfaces questions in
+  the overlay so it works with no terminal.
+
+> **Roadmap (next phase):** in `worker` mode on a *built/deployed* server (not
+> HMR), applied changes should be opened as a **PR** instead of just written to
+> the working tree. Not implemented yet — today the worker edits files in place.
+
 ## Headless worker (test server · designers & PMs)
 
 So non-engineers can leave feedback and see it applied **without running an agent

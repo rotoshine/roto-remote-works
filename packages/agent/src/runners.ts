@@ -1,4 +1,20 @@
 export type AgentKind = "claude" | "codex";
+export type RunMode = "session" | "worker";
+export interface RunnerChoice {
+  mode: RunMode;
+  agent: AgentKind;
+}
+
+/**
+ * Resolve the effective runner from the configured choice and any CLI flags.
+ * Flags win; unknown flag values are ignored (config is kept).
+ */
+export function resolveRunner(configured: RunnerChoice, flags: { mode?: unknown; agent?: unknown }): RunnerChoice {
+  const mode: RunMode = flags.mode === "worker" ? "worker" : flags.mode === "session" ? "session" : configured.mode;
+  const agent: AgentKind =
+    flags.agent === "codex" ? "codex" : flags.agent === "claude" ? "claude" : configured.agent;
+  return { mode, agent };
+}
 
 const PROMPT =
   "A design-comment apply request is pending. Follow the rrw design-comment " +

@@ -3,6 +3,10 @@
   "token": "change-me-dev-token",
   "author": "your name",
   "origin": "local",
+  "processing": {
+    "mode": "session",
+    "agent": "claude"
+  },
   "bridge": {
     "port": 4317,
     "host": "127.0.0.1",

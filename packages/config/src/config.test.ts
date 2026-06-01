@@ -82,4 +82,31 @@ describe("loadConfig", () => {
     const c = loadConfig({ cwd: "/proj", env: { RRW_DATA_DIR: "/var/rrw" }, fs });
     expect(c.bridge.dataDir).toBe("/var/rrw");
   });
+
+  it("defaults processing to session mode + claude agent", () => {
+    const c = loadConfig({ cwd: "/proj", env: {}, fs: fakeFs({}) });
+    expect(c.processing.mode).toBe("session");
+    expect(c.processing.agent).toBe("claude");
+  });
+
+  it("reads processing.mode/agent from the file", () => {
+    const fs = fakeFs({ "/proj/rrw.config.json": JSON.stringify({ processing: { mode: "worker", agent: "codex" } }) });
+    const c = loadConfig({ cwd: "/proj", env: {}, fs });
+    expect(c.processing.mode).toBe("worker");
+    expect(c.processing.agent).toBe("codex");
+  });
+
+  it("env RRW_MODE/RRW_AGENT override the file", () => {
+    const fs = fakeFs({ "/proj/rrw.config.json": JSON.stringify({ processing: { mode: "worker", agent: "codex" } }) });
+    const c = loadConfig({ cwd: "/proj", env: { RRW_MODE: "session", RRW_AGENT: "claude" }, fs });
+    expect(c.processing.mode).toBe("session");
+    expect(c.processing.agent).toBe("claude");
+  });
+
+  it("normalizes unknown processing values back to defaults", () => {
+    const fs = fakeFs({ "/proj/rrw.config.json": JSON.stringify({ processing: { mode: "weird", agent: "gpt" } }) });
+    const c = loadConfig({ cwd: "/proj", env: {}, fs });
+    expect(c.processing.mode).toBe("session");
+    expect(c.processing.agent).toBe("claude");
+  });
 });
