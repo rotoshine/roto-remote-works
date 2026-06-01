@@ -1,14 +1,14 @@
 # roto-remote-works
 
-Click an element on your **running React app**, leave a comment, and a Claude
-Code session reads it and edits the code — with **live progress** and
-**questions answered in the web overlay** (not the terminal). Works locally or
-from any environment via a remote bridge.
+**실행 중인 React 앱**에서 요소를 클릭해 코멘트를 남기면, Claude Code 세션이 그
+코멘트를 읽고 코드를 수정합니다 — **진행 상황은 실시간으로**, **질문은 (터미널이
+아니라) 웹 오버레이에서** 답합니다. 로컬에서도, 원격 브리지를 통해 어떤 환경에서도
+동작합니다.
 
-> Generalized, React-targeted version of an in-project design-comment overlay.
-> Distributed via a **Claude-driven setup** (not npm).
+> 프로젝트 내부에 두던 디자인-코멘트 오버레이를 React용으로 일반화한 도구입니다.
+> npm이 아니라 **Claude 주도 설치(setup)**로 배포합니다.
 
-## ✨ Quick setup (paste into Claude Code, in your React project)
+## ✨ 빠른 설치 (React 프로젝트에서 Claude Code에 붙여넣기)
 
 ```
 이 프로젝트에 roto-remote-works 디자인 코멘트 도구를 설치해줘.
@@ -17,32 +17,30 @@ clone 안의 skills/rrw-setup/SKILL.md 절차를 따라 설치하고,
 이 프로젝트의 스택(React/Next/Vite/Tailwind 등)을 분석해 필요한 React 스킬을 설치해줘.
 ```
 
-Claude will: clone the tool → build & **vendor the overlay** (a self-contained
-`overlay.js`, styles bundled, host CSS system irrelevant) → wire it dev-gated →
-**analyze your stack** and install matching React skills → start the bridge.
+Claude가 수행하는 것: 도구 clone → 오버레이 빌드·**vendoring**(자체 완결형
+`overlay.js`, 스타일 내장 → 호스트 CSS 시스템과 무관) → dev 전용으로 연결 →
+**스택 분석** 후 맞는 React 스킬 설치 → 브리지 기동.
 
-## How it works
+## 동작 방식
 
 ```
-[your React app (dev) + overlay] ──HTTP──▶ [bridge (Hono)] ◀──poll── [Claude: rrw + skills]
-       vendored, Shadow DOM            local default / remote        rrw-process skill
+[내 React 앱(dev) + 오버레이] ──HTTP──▶ [bridge (Hono)] ◀──poll── [Claude: rrw + 스킬]
+       vendoring, Shadow DOM          로컬 기본 / 원격          rrw-process 스킬
 ```
 
-- **bridge** (`packages/bridge`, Hono) — single source of truth (comments,
-  apply request, progress, questions). Runs from the clone; `127.0.0.1` by
-  default, remote behind a private tunnel.
-- **overlay** (`packages/overlay`, React+Vite+Tailwind) — vendored into your app;
-  renders in a **Shadow DOM** with its own styles (blue theme). Fiber → source
-  `file:line`, and captures a **viewport screenshot** with each comment
-  (lazy html2canvas) so loose visual feedback ("여기 간격 이상") still gives the
-  agent something to *see*.
-- **agent** (`packages/agent`) — the `rrw` CLI + the `rrw-process` skill the
-  Claude session uses to apply comments, report progress, and ask via the web.
+- **bridge** (`packages/bridge`, Hono) — 단일 진실 공급원(코멘트, apply 요청,
+  진행 상태, 질문). clone에서 실행하며 기본은 `127.0.0.1`, 원격은 사설 터널 뒤에 둡니다.
+- **overlay** (`packages/overlay`, React+Vite+Tailwind) — 앱에 vendoring되어
+  **Shadow DOM** 안에서 자체 스타일(파란 테마)로 렌더됩니다. React fiber로 소스
+  `file:line`을 찾고, 코멘트마다 **뷰포트 스크린샷**을 캡처(lazy html2canvas)해
+  "여기 간격 이상" 같은 느슨한 시각 피드백도 에이전트가 *볼* 수 있게 합니다.
+- **agent** (`packages/agent`) — `rrw` CLI + Claude 세션이 코멘트를 적용하고
+  진행 상황을 보고하고 웹으로 질문하는 데 쓰는 `rrw-process` 스킬.
 
-## Configuration — `rrw.config.json`
+## 설정 — `rrw.config.json`
 
-One file at the **project root** configures all three sides (bridge, `rrw` CLI,
-overlay loader). Copy `rrw.config.example.json` → `rrw.config.json`:
+**프로젝트 루트**의 파일 하나로 세 곳(bridge, `rrw` CLI, 오버레이 로더)을 모두
+설정합니다. `rrw.config.example.json`을 `rrw.config.json`으로 복사하세요:
 
 ```json
 {
@@ -53,137 +51,137 @@ overlay loader). Copy `rrw.config.example.json` → `rrw.config.json`:
 }
 ```
 
-- The bridge + agent find it by walking up from their working dir; the overlay
-  loader imports it directly.
-- **Precedence**: defaults < `rrw.config.json` < env. So a server can keep the
-  real token out of the committed file and pass `RRW_TOKEN` (and
-  `RRW_BRIDGE_URL`, `RRW_PORT`, `RRW_HOST`, `RRW_DATA_DIR`, `RRW_AUTHOR`,
-  `RRW_ORIGIN`) via the environment.
-- The browser overlay needs a token client-side, so use a **low-trust** value
-  there; never put a high-trust/remote token in code shipped to the browser.
+- bridge와 agent는 작업 디렉터리에서 위로 올라가며 이 파일을 찾고, 오버레이 로더는
+  직접 import합니다.
+- **우선순위**: 기본값 < `rrw.config.json` < 환경변수. 따라서 서버에서는 실제
+  토큰을 커밋된 파일에 넣지 않고 `RRW_TOKEN`(그리고 `RRW_BRIDGE_URL`, `RRW_PORT`,
+  `RRW_HOST`, `RRW_DATA_DIR`, `RRW_AUTHOR`, `RRW_ORIGIN`)을 환경변수로 줄 수 있습니다.
+- 브라우저 오버레이는 클라이언트 측에서 토큰이 필요하므로 **저신뢰** 값을 쓰세요.
+  고신뢰/원격 토큰을 브라우저로 보내는 코드에 절대 넣지 마세요.
 
-## Run the bridge
+## 브리지 실행
 
 ```bash
 cd .rrw && pnpm install
-pnpm --filter @rrw/bridge start   # reads rrw.config.json; prints URL + token
+pnpm --filter @rrw/bridge start   # rrw.config.json을 읽음; URL + 토큰 출력
 ```
 
-## Remote (comment from anywhere) — Tailscale runbook
+## 원격 (어디서든 코멘트) — Tailscale 런북
 
-Do **not** expose the bridge publicly. Put it behind **network gating** (here:
-Tailscale). On binding a non-loopback address the bridge prints a warning to this
-effect. End-to-end:
+브리지를 **공개적으로 노출하지 마세요.** **네트워크 게이팅**(여기서는 Tailscale)
+뒤에 두세요. 비-loopback 주소에 바인드하면 브리지가 이에 대한 경고를 출력합니다.
+전 과정:
 
-**On the bridge/agent host** (has the repo checkout):
-1. Join the tailnet: install Tailscale, `tailscale up`. Note the host's MagicDNS
-   name (e.g. `devbox.tailnet-xyz.ts.net`).
-2. `rrw.config.json` here holds the **high-trust** token (server-side, fine):
+**브리지/에이전트 호스트에서** (코드 체크아웃이 있는 곳):
+1. tailnet 가입: Tailscale 설치 후 `tailscale up`. 호스트의 MagicDNS 이름을
+   확인합니다(예: `devbox.tailnet-xyz.ts.net`).
+2. 여기의 `rrw.config.json`은 **고신뢰** 토큰을 가집니다(서버 측이라 괜찮음):
    ```jsonc
    { "bridgeUrl": "https://devbox.tailnet-xyz.ts.net:4317",
-     "token": "<HIGH-trust>", "clientToken": "<LOW-trust>",
+     "token": "<고신뢰>", "clientToken": "<저신뢰>",
      "processing": { "mode": "worker", "delivery": "pr", "base": "main" },
      "bridge": { "host": "0.0.0.0", "port": 4317 } }
    ```
-3. Start the bridge: `pnpm --filter @rrw/bridge --dir .rrw start` (binds 0.0.0.0 →
-   reachable only on the tailnet). Only tailnet members can reach it.
-4. Run the worker: `cd .rrw && ./rrw run` (mode=worker, delivery=pr). It applies
-   each request and opens a PR (`gh` must be authed + push rights on this host).
-   `rrw ask` surfaces questions in the overlay — no terminal needed.
+3. 브리지 기동: `pnpm --filter @rrw/bridge --dir .rrw start` (0.0.0.0에 바인드 →
+   tailnet에서만 접근 가능). tailnet 구성원만 접근할 수 있습니다.
+4. 워커 실행: `cd .rrw && ./rrw run` (mode=worker, delivery=pr). 요청마다 적용하고
+   PR을 엽니다(이 호스트에 `gh` 인증 + push 권한 필요). `rrw ask`로 질문이
+   오버레이에 뜨므로 터미널이 필요 없습니다.
 
-**In the deployed app** (what designers/PMs load):
-5. Build with `rrw.config.json` containing **only** `bridgeUrl` (the MagicDNS
-   address) + `clientToken` + `author` — **never the high-trust `token`** (the
-   overlay bundles this file). Supply the bridge's high-trust token via `RRW_TOKEN`
-   env on the host instead.
-6. Designers/PMs on the tailnet open the app, leave comments; the worker turns
-   them into PRs. The low-trust token can't resolve/ask/read screenshots (403).
+**배포된 앱에서** (디자이너/PM이 여는 화면):
+5. `rrw.config.json`에 **오직** `bridgeUrl`(MagicDNS 주소) + `clientToken` +
+   `author`만 담아 빌드하세요 — **고신뢰 `token`은 절대 넣지 마세요**(오버레이가
+   이 파일을 번들에 포함). 브리지의 고신뢰 토큰은 호스트의 `RRW_TOKEN` 환경변수로
+   주입합니다.
+6. tailnet 위의 디자이너/PM이 앱을 열고 코멘트를 남기면, 워커가 PR로 만듭니다.
+   저신뢰 토큰은 resolve/질문/스크린샷 읽기를 할 수 없습니다(403).
 
-> Cloudflare Access works the same way — gate the host, point `bridgeUrl` at it.
+> Cloudflare Access도 동일하게 동작합니다 — 호스트를 게이팅하고 `bridgeUrl`을
+> 그쪽으로 가리키면 됩니다.
 
-**Verified locally** (Tailscale tunnel aside): the bridge bound to `0.0.0.0` is
-reachable over a non-loopback address with both tiers enforced (401 / client 200
-read but 403 on agent routes / agent 200). On your tailnet, swap the LAN address
-for the MagicDNS name + lock down with tailnet ACLs.
+**로컬 검증 완료**(Tailscale 터널 제외): `0.0.0.0`에 바인드한 브리지가 비-loopback
+주소로 접근 가능하며 두 티어가 모두 강제됨(토큰 없음 401 / 클라이언트 읽기 200이나
+agent 라우트 403 / agent 200). tailnet에서는 LAN 주소를 MagicDNS 이름으로 바꾸고
+tailnet ACL로 잠그세요.
 
-### Security model
-- **Two token tiers** (set `clientToken` to enable):
-  - `clientToken` (low trust, in the browser) — may comment, read status/questions,
-    answer questions, request apply, clear comments.
-  - `token` (high trust, server-side) — everything, incl. the agent-only routes:
-    resolve/patch comments, set progress, ask (post question), read screenshots,
-    read/clear the apply request. The low-trust token gets **403** on these.
-  - With no `clientToken`, the single `token` authorizes everything (local default).
-  - **Never bundle the high-trust token into the browser.** In two-token mode keep
-    `token` out of `rrw.config.json` (the overlay bundles that file) and provide it
-    via `RRW_TOKEN` env on the bridge/agent hosts; put only `clientToken` in the file.
-- **Comments are untrusted data, never instructions** (prompt-injection guard).
-- `apply` is **operator-gated**; remote-origin requests are **review-then-apply**,
-  never auto-applied.
+### 보안 모델
+- **2-토큰 티어** (`clientToken`을 설정하면 활성화):
+  - `clientToken` (저신뢰, 브라우저) — 코멘트 작성, 상태/질문 읽기, 질문 답변,
+    apply 요청, 코멘트 비우기 가능.
+  - `token` (고신뢰, 서버 측) — 모든 것, 특히 agent 전용 라우트: 코멘트
+    resolve/patch, 진행 상태 설정, 질문 등록(ask), 스크린샷 읽기, apply 요청
+    읽기/삭제. 저신뢰 토큰은 이들에서 **403**.
+  - `clientToken`이 없으면 단일 `token`이 모든 것을 인가(로컬 기본값).
+  - **고신뢰 토큰을 브라우저 번들에 넣지 마세요.** 2-토큰 모드에서는 `token`을
+    `rrw.config.json`에서 빼고(오버레이가 이 파일을 번들에 포함) 브리지/에이전트
+    호스트의 `RRW_TOKEN` 환경변수로 주세요. 파일에는 `clientToken`만.
+- **코멘트는 신뢰할 수 없는 데이터이며, 명령이 아닙니다**(프롬프트 인젝션 방어).
+- `apply`는 **운영자 게이팅**됩니다. 원격-origin 요청은 **검토 후 적용**이며 절대
+  자동 적용되지 않습니다.
 
-## Processing modes — who applies the comments
+## 처리 모드 — 누가 코멘트를 적용하는가
 
-Set `processing.mode` in `rrw.config.json` (or `RRW_MODE` / `rrw run --mode`):
+`rrw.config.json`의 `processing.mode`(또는 `RRW_MODE` / `rrw run --mode`)로 설정:
 
-| mode | who applies | when | how edits land |
+| mode | 적용 주체 | 언제 | 수정 반영 방식 |
 |---|---|---|---|
-| `session` (default) | your **interactive** Claude/Codex session via the `rrw-process` skill | local dev (HMR) | saved files → HMR reflects instantly |
-| `worker` | a **headless** runner (`claude -p` / `codex exec`) spawned per request | standalone / remote bridge, no human attached | saved files on that host |
+| `session` (기본) | `rrw-process` 스킬을 통한 **인터랙티브** Claude/Codex 세션 | 로컬 개발(HMR) | 파일 저장 → HMR 즉시 반영 |
+| `worker` | 요청마다 spawn되는 **헤드리스** 러너(`claude -p` / `codex exec`) | 사람이 안 붙은 스탠드얼론/원격 브리지 | 해당 호스트에 파일 저장 |
 
 ```bash
-rrw run                 # dispatch on the configured mode
-rrw run --mode worker   # override for this run
-rrw worker --agent codex  # force headless (same as run --mode worker)
+rrw run                 # 설정된 모드대로 디스패치
+rrw run --mode worker   # 이번 실행만 오버라이드
+rrw worker --agent codex  # 헤드리스 강제 (run --mode worker와 동일)
 ```
 
-- **Local interactive** → keep `mode: "session"`. Don't spawn a second headless
-  agent on the repo you're editing (stdin/permission/concurrent-edit clashes).
-- **Standalone/remote bridge** → `mode: "worker"`, run `rrw run` (or `rrw worker`)
-  on a host that has the code checkout. `rrw ask` (web-ask) surfaces questions in
-  the overlay so it works with no terminal.
+- **로컬 인터랙티브** → `mode: "session"` 유지. 편집 중인 repo에 두 번째 헤드리스
+  에이전트를 띄우지 마세요(stdin/권한/동시 편집 충돌).
+- **스탠드얼론/원격 브리지** → `mode: "worker"`, 코드 체크아웃이 있는 호스트에서
+  `rrw run`(또는 `rrw worker`) 실행. `rrw ask`(web-ask)가 질문을 오버레이에 띄워
+  터미널 없이도 동작합니다.
 
-### Delivery — where worker edits land (`processing.delivery`)
+### Delivery — 워커 수정이 어디로 가는가 (`processing.delivery`)
 
-| delivery | what the worker does after the agent edits | use for |
+| delivery | 에이전트 편집 후 워커가 하는 일 | 용도 |
 |---|---|---|
-| `in-place` (default) | leaves the changes in the working tree | local / HMR / test server that hot-reloads |
-| `pr` | branches → commits → pushes → `gh pr create`, then returns to `base` | **built/deployed** servers that can't hot-reload (review-then-merge) |
+| `in-place` (기본) | 변경을 워킹트리에 그대로 둠 | 로컬 / HMR / hot-reload되는 테스트 서버 |
+| `pr` | branch → commit → push → `gh pr create` 후 `base`로 복귀 | hot-reload 불가한 **빌드/배포** 서버 (검토 후 머지) |
 
 ```bash
-rrw run --mode worker --delivery pr     # apply via PR (base = processing.base, default main)
+rrw run --mode worker --delivery pr     # PR로 적용 (base = processing.base, 기본 main)
 ```
 
-In `pr` delivery the worker, per request: `git checkout <base> && git pull` →
-runs the agent → if the tree changed, opens a PR titled/bodied from the
-addressed comments (needs `gh` auth + push rights on that host). The PR is
-**review-then-merge** — nothing auto-deploys.
+`pr` delivery에서 워커는 요청마다: `git checkout <base> && git pull` → 에이전트
+실행 → 트리가 바뀌었으면 적용한 코멘트로 제목/본문을 구성해 PR을 엽니다(해당
+호스트에 `gh` 인증 + push 권한 필요). PR은 **검토 후 머지**이며 자동 배포는
+없습니다.
 
-## Headless worker (test server · designers & PMs)
+## 헤드리스 워커 (테스트 서버 · 디자이너 & PM)
 
-So non-engineers can leave feedback and see it applied **without running an agent
-themselves**, run a persistent worker that polls the bridge and invokes an agent
-per request:
+비엔지니어가 **직접 에이전트를 돌리지 않고도** 피드백을 남기고 적용되는 것을 보게
+하려면, 브리지를 폴링하며 요청마다 에이전트를 호출하는 상시 워커를 실행하세요:
 
 ```bash
 RRW_BRIDGE_URL=<bridge> RRW_TOKEN=<token> \
-  pnpm --filter @rrw/agent exec tsx src/cli.ts worker --agent claude   # or: --agent codex
+  pnpm --filter @rrw/agent exec tsx src/cli.ts worker --agent claude   # 또는: --agent codex
 ```
 
-It dedupes by request, processes **one batch at a time** (single-flight), and
-spawns the agent headlessly (`claude -p` / `codex exec`) pointed at the
-agent-neutral `docs/PROTOCOL.md`. See `adapters/` to add another agent.
+요청을 디듀프하고, **한 번에 한 배치씩**(single-flight) 처리하며, 에이전트-중립
+`docs/PROTOCOL.md`를 가리켜 에이전트를 헤드리스로 spawn합니다(`claude -p` /
+`codex exec`). 다른 에이전트를 추가하려면 `adapters/`를 참고하세요.
 
-## Packages
-- `packages/bridge` — Hono server + `rrw-bridge` CLI
-- `packages/overlay` — React overlay (vendored, Shadow DOM, self-contained CSS)
-- `packages/agent` — `rrw` CLI + protocol
-- `skills/rrw-setup`, `skills/rrw-process` — Claude Code skills
-- `docs/specs/` — design spec
+## 패키지
+- `packages/bridge` — Hono 서버 + `rrw-bridge` CLI
+- `packages/overlay` — React 오버레이 (vendoring, Shadow DOM, 자체 완결형 CSS)
+- `packages/config` — 공유 `rrw.config.json` 로더(`@rrw/config`)
+- `packages/agent` — `rrw` CLI + 프로토콜
+- `skills/rrw-setup`, `skills/rrw-process` — Claude Code 스킬
+- `docs/specs/` — 설계 스펙
 
-## Develop
+## 개발
 ```bash
 pnpm install
-pnpm -r test        # all packages
+pnpm -r test        # 전체 패키지
 pnpm -r typecheck
 pnpm --filter @rrw/overlay build   # → packages/overlay/dist/overlay.js
 ```
