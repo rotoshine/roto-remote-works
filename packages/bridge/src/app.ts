@@ -58,8 +58,9 @@ export function createApp(opts: AppOptions): Hono {
   app.post("/apply", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as { origin?: ApplyOrigin };
     const origin: ApplyOrigin = body.origin === "local" ? "local" : "remote";
-    const req = await store.requestApply(origin);
-    return req ? c.json(req, 202) : c.json({ error: "no open comments" }, 400);
+    const result = await store.requestApply(origin);
+    if (result.ok) return c.json(result.request, 202);
+    return c.json({ error: result.reason }, result.reason === "busy" ? 409 : 400);
   });
   app.get("/request", async (c) => c.json(await store.getRequest()));
   app.delete("/request", async (c) => {

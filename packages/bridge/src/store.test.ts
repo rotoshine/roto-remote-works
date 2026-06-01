@@ -115,27 +115,47 @@ describe("Store — screenshots", () => {
   });
 });
 
-describe("Store — apply / request", () => {
-  it("requestApply queues open comments and records a request with origin + ids", async () => {
+describe("Store — comments author", () => {
+  it("stores the comment author", async () => {
+    const { store } = await tempStore();
+    const c = await store.addComment({ comment: "x", author: "Designer A" });
+    expect(c.author).toBe("Designer A");
+  });
+});
+
+describe("Store — apply / request (single-flight)", () => {
+  it("queues open comments, records a request, and marks the run queued (ok)", async () => {
     const { store } = await tempStore();
     const a = await store.addComment({ comment: "a" });
     await store.patchComment(a.id, { status: "resolved" });
     const b = await store.addComment({ comment: "b" });
 
-    const req = await store.requestApply("local");
+    const res = await store.requestApply("local");
 
-    expect(req?.origin).toBe("local");
-    expect(req?.ids).toEqual([b.id]);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.request.origin).toBe("local");
+      expect(res.request.ids).toEqual([b.id]);
+    }
     const list = await store.listComments();
     expect(list.find((c) => c.id === b.id)?.status).toBe("queued");
     expect(list.find((c) => c.id === a.id)?.status).toBe("resolved");
+    expect((await store.getStatus()).state).toBe("queued");
     expect((await store.getRequest())?.ids).toEqual([b.id]);
   });
 
-  it("requestApply returns null when there are no open comments", async () => {
+  it("returns no-open when there are no open comments", async () => {
     const { store } = await tempStore();
-    expect(await store.requestApply("local")).toBeNull();
+    expect(await store.requestApply("local")).toEqual({ ok: false, reason: "no-open" });
     expect(await store.getRequest()).toBeNull();
+  });
+
+  it("returns busy when a run is already in progress (single-flight)", async () => {
+    const { store } = await tempStore();
+    await store.addComment({ comment: "a" });
+    await store.requestApply("local");
+    await store.addComment({ comment: "b" });
+    expect(await store.requestApply("local")).toEqual({ ok: false, reason: "busy" });
   });
 
   it("clearRequest removes the pending request", async () => {

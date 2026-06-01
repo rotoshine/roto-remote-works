@@ -16,6 +16,8 @@ export interface MountConfig {
   client?: BridgeClient;
   /** Override screenshot capture (default: html2canvas viewport capture). */
   captureScreenshot?: () => Promise<string | null>;
+  /** Who is commenting (designer/PM/engineer name). */
+  author?: string;
 }
 
 /**
@@ -50,6 +52,7 @@ export function mountOverlay(config: MountConfig = {}): () => void {
       pollMs={config.pollMs}
       origin={config.origin}
       captureScreenshot={config.captureScreenshot ?? defaultCapture}
+      author={config.author}
     />,
   );
 

@@ -16,6 +16,7 @@ export async function submitComment(
   draft: DraftLike,
   text: string,
   capture?: () => Promise<string | null>,
+  author?: string | null,
 ): Promise<void> {
   let screenshot: string | null = null;
   if (capture) {
@@ -36,5 +37,6 @@ export async function submitComment(
     source: draft.source,
     rect: draft.rect,
     screenshot,
+    author: author ?? null,
   });
 }

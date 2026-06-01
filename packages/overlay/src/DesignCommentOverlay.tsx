@@ -12,6 +12,8 @@ export interface DesignCommentOverlayProps {
   origin?: ApplyOrigin;
   /** Optional screenshot capture; result (PNG data URL) is attached to comments. */
   captureScreenshot?: () => Promise<string | null>;
+  /** Who is commenting (designer/PM/engineer); attached to each comment. */
+  author?: string;
 }
 
 const IDLE: Status = { state: "idle", currentStep: null, perComment: {}, updatedAt: "" };
@@ -23,6 +25,7 @@ export function DesignCommentOverlay({
   pollMs = 1500,
   origin = "local",
   captureScreenshot,
+  author,
 }: DesignCommentOverlayProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [status, setStatus] = useState<Status>(IDLE);
@@ -86,14 +89,18 @@ export function DesignCommentOverlay({
 
   const submitDraft = useCallback(async () => {
     if (!draft || !draftText.trim()) return;
-    await submitComment(client, draft, draftText.trim(), captureScreenshot);
+    await submitComment(client, draft, draftText.trim(), captureScreenshot, author);
     setDraft(null);
     setDraftText("");
     void poll();
-  }, [client, draft, draftText, captureScreenshot, poll]);
+  }, [client, draft, draftText, captureScreenshot, author, poll]);
 
   const requestApply = useCallback(async () => {
-    await client.apply(origin);
+    try {
+      await client.apply(origin);
+    } catch {
+      /* busy or unreachable — the next poll reflects the real state */
+    }
     void poll();
   }, [client, origin, poll]);
 
@@ -187,6 +194,7 @@ export function DesignCommentOverlay({
           <ul className="rrw-panel-list">
             {active.map((c) => (
               <li key={c.id} className="rrw-panel-item">
+                {c.author ? <strong className="rrw-panel-author">{c.author}: </strong> : null}
                 {c.comment}
               </li>
             ))}

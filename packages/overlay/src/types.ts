@@ -23,6 +23,7 @@ export interface Comment {
   source: string | null;
   rect: Rect | null;
   screenshot?: string | null;
+  author?: string | null;
   createdAt: string;
 }
 
@@ -38,6 +39,7 @@ export interface NewComment {
   rect?: Rect | null;
   /** PNG data URL captured at comment time. */
   screenshot?: string | null;
+  author?: string | null;
 }
 
 export interface CommentPatch {

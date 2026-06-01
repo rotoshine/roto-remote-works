@@ -28,6 +28,12 @@ describe("submitComment", () => {
     expect(addComment).toHaveBeenCalledWith(expect.objectContaining({ comment: "x", screenshot: null }));
   });
 
+  it("includes the author when provided", async () => {
+    const addComment = vi.fn(async (i) => ({ id: "1", ...i }));
+    await submitComment({ addComment }, draft, "x", undefined, "Designer A");
+    expect(addComment).toHaveBeenCalledWith(expect.objectContaining({ author: "Designer A" }));
+  });
+
   it("degrades to null when capture throws", async () => {
     const addComment = vi.fn(async (i) => ({ id: "1", ...i }));
     const capture = vi.fn(async () => {

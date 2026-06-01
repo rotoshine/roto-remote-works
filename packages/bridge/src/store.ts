@@ -25,6 +25,8 @@ export interface Comment {
   rect: Rect | null;
   /** Relative path to the saved screenshot (e.g. "screenshots/<id>.png"), or null. */
   screenshot?: string | null;
+  /** Who left the comment (designer/PM/engineer); null if anonymous. */
+  author?: string | null;
   createdAt: string;
 }
 
@@ -40,6 +42,7 @@ export interface NewComment {
   rect?: Rect | null;
   /** A PNG data URL ("data:image/png;base64,…") captured at comment time. */
   screenshot?: string | null;
+  author?: string | null;
 }
 
 export interface CommentPatch {
@@ -54,6 +57,10 @@ export interface ApplyRequest {
   origin: ApplyOrigin;
   ids: string[];
 }
+
+export type ApplyResult =
+  | { ok: true; request: ApplyRequest }
+  | { ok: false; reason: "no-open" | "busy" };
 
 export type RunState = "idle" | "queued" | "applying" | "done" | "error";
 
@@ -164,6 +171,7 @@ export class Store {
         source: input.source ?? null,
         rect: input.rect ?? null,
         screenshot: null,
+        author: input.author ?? null,
         createdAt: this.now(),
       };
       if (input.screenshot) {
@@ -222,20 +230,26 @@ export class Store {
   }
 
   // ── apply / request ───────────────────────────────────────
-  requestApply(origin: ApplyOrigin): Promise<ApplyRequest | null> {
+  requestApply(origin: ApplyOrigin): Promise<ApplyResult> {
     return this.mutate(async () => {
+      // single-flight: reject if a run is already queued/applying
+      const status = await this.readJson<Status>(this.path("status.json"), this.defaultStatus());
+      if (status.state === "queued" || status.state === "applying") {
+        return { ok: false, reason: "busy" };
+      }
       const list = await this.readComments();
       const open = list.filter((c) => c.status === "open");
-      if (open.length === 0) return null;
+      if (open.length === 0) return { ok: false, reason: "no-open" };
       for (const c of list) if (c.status === "open") c.status = "queued";
       await this.writeComments(list);
-      const req: ApplyRequest = {
+      const request: ApplyRequest = {
         requestedAt: this.now(),
         origin,
         ids: open.map((c) => c.id),
       };
-      await this.writeJson(this.path("request.json"), req);
-      return req;
+      await this.writeJson(this.path("request.json"), request);
+      await this.writeJson(this.path("status.json"), { ...status, state: "queued", updatedAt: this.now() });
+      return { ok: true, request };
     });
   }
 

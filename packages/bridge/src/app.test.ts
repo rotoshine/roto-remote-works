@@ -114,6 +114,10 @@ describe("bridge app — apply / status / question", () => {
     const req = await data(res);
     expect(req.origin).toBe("local");
     expect(req.ids).toEqual(["id-1"]);
+
+    // single-flight: a second apply while a run is in progress → 409
+    await json("/comments", "POST", { comment: "y" });
+    expect((await json("/apply", "POST", { origin: "local" })).status).toBe(409);
   });
 
   it("GET /status defaults to idle; PATCH merges", async () => {
