@@ -5,16 +5,18 @@ import { cmdStatus, cmdComment, cmdResolve, cmdDone, cmdPull, cmdScreenshot } fr
 import { askQuestion } from "./ask";
 import { runWorkerLoop } from "./worker";
 import { agentCommand, type AgentKind } from "./runners";
+import { loadConfig } from "@rrw/config";
 import type { CommentStatus, RunState } from "@rrw/bridge";
 
 function config(): { baseUrl: string; token: string } {
-  const baseUrl = process.env.RRW_BRIDGE_URL ?? "http://localhost:4317";
-  const token = process.env.RRW_TOKEN ?? "";
-  if (!token) {
-    console.error("RRW_TOKEN is required (set it to the bridge token).");
+  // rrw.config.json (nearest ancestor) supplies bridgeUrl + token; env
+  // (RRW_BRIDGE_URL / RRW_TOKEN) overrides it.
+  const cfg = loadConfig();
+  if (!cfg.token) {
+    console.error("token required: set it in rrw.config.json or the RRW_TOKEN env (the bridge token).");
     process.exit(1);
   }
-  return { baseUrl, token };
+  return { baseUrl: cfg.bridgeUrl, token: cfg.token };
 }
 
 function parseFlags(args: string[]): { positionals: string[]; flags: Record<string, string | boolean> } {

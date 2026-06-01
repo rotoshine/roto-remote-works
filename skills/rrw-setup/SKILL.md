@@ -26,18 +26,20 @@ Copy the built artifact into the app and add a dev-only loader:
 ```bash
 mkdir -p components/rrw && cp .rrw/packages/overlay/dist/overlay.js components/rrw/overlay.js
 ```
-Create `components/rrw/RrwOverlay.tsx`:
+Create `components/rrw/RrwOverlay.tsx` (reads the shared `rrw.config.json` — see step 5):
 ```tsx
 "use client";
 import { useEffect } from "react";
+import rrwConfig from "@/rrw.config.json"; // bridgeUrl, token, author
 export function RrwOverlay() {
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
     let unmount: (() => void) | undefined;
     import("./overlay.js").then((m) => {
       unmount = m.mountOverlay({
-        bridgeUrl: process.env.NEXT_PUBLIC_RRW_BRIDGE_URL ?? "http://localhost:4317",
-        token: process.env.NEXT_PUBLIC_RRW_TOKEN ?? "",
+        bridgeUrl: rrwConfig.bridgeUrl ?? "http://localhost:4317",
+        token: rrwConfig.token ?? "",
+        author: rrwConfig.author,
       });
     });
     return () => unmount?.();
@@ -45,18 +47,32 @@ export function RrwOverlay() {
   return null;
 }
 ```
-(Vite: read `import.meta.env.VITE_RRW_*` and `import.meta.env.DEV` instead.)
+(Vite: gate with `import.meta.env.DEV`; the JSON import is the same.)
 
 ## 4. Wire it dev-gated
 - **Next**: in `app/layout.tsx` `<body>`, render
   `{process.env.NODE_ENV !== "production" && <RrwOverlay />}`.
 - **Vite**: in `src/main.tsx`, `if (import.meta.env.DEV) import("./components/rrw/RrwOverlay")…`.
 
-## 5. Config
-Add the bridge URL + token to the app env (dev only):
-`NEXT_PUBLIC_RRW_BRIDGE_URL`, `NEXT_PUBLIC_RRW_TOKEN` (or `VITE_…`). For local use,
-the bridge prints its token on start. For remote, see the project README
-(network gating).
+## 5. Config — `rrw.config.json` (one file, read by all three sides)
+Create `rrw.config.json` at the **project root**. The bridge, the `rrw` CLI, and
+the overlay loader all read it; env vars override it (so secrets/remote tokens
+can stay in env on a server).
+```json
+{
+  "bridgeUrl": "http://localhost:4317",
+  "token": "<dev token — overlay & bridge must match>",
+  "author": "your name",
+  "bridge": { "port": 4317, "host": "127.0.0.1", "dataDir": ".rrw/.rrw-data" }
+}
+```
+- **Local**: keep `bridgeUrl` at localhost; set any `token` (overlay needs it client-side).
+- **Remote**: set `bridgeUrl` to the gated host (Tailscale/Cloudflare Access). Keep the
+  real token **out of the committed file** — supply it via `RRW_TOKEN` on the bridge
+  and agent hosts (env overrides the file). The browser overlay still needs a token,
+  so use a low-trust value there.
+- Precedence: built-in defaults < `rrw.config.json` < env (`RRW_BRIDGE_URL`, `RRW_TOKEN`,
+  `RRW_PORT`, `RRW_HOST`, `RRW_DATA_DIR`, `RRW_AUTHOR`, `RRW_ORIGIN`).
 
 ## 6. Install matching React skills
 The applier follows these for quality React edits:
@@ -73,11 +89,14 @@ Create `.rrw/rrw` (chmod +x):
 #!/usr/bin/env bash
 cd "$(dirname "$0")/packages/agent" && exec pnpm exec tsx src/cli.ts "$@"
 ```
-Tell the user to set `RRW_BRIDGE_URL` + `RRW_TOKEN` when invoking it.
+Run it from inside the project so it finds `rrw.config.json` (it walks up from
+its own dir). Override with `RRW_BRIDGE_URL` / `RRW_TOKEN` env only when needed.
 
 ## 8. Start the bridge & verify
+The bridge reads `rrw.config.json` automatically (port/host/dataDir/token):
 ```bash
-RRW_TOKEN=<token> pnpm --filter @rrw/bridge --dir .rrw start
+pnpm --filter @rrw/bridge --dir .rrw start   # add RRW_TOKEN=… only to override the file
 ```
-Then run the dev server, open the app, and confirm the **＋ 코멘트** FAB appears.
-Hand off to `rrw-process` for applying comments.
+Then run the dev server, open the app, and confirm the **＋ 코멘트** FAB appears
+(hovering highlights the element under the cursor). Hand off to `rrw-process`
+for applying comments.

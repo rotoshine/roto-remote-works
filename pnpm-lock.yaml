@@ -13,6 +13,9 @@ importers:
       '@rrw/bridge':
         specifier: workspace:*
         version: link:../bridge
+      '@rrw/config':
+        specifier: workspace:*
+        version: link:../config
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -32,9 +35,27 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.23)
+      '@rrw/config':
+        specifier: workspace:*
+        version: link:../config
       hono:
         specifier: ^4.6.14
         version: 4.12.23
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.19
+      tsx:
+        specifier: ^4.19.2
+        version: 4.22.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.19)(jsdom@25.0.1)
+
+  packages/config:
     devDependencies:
       '@types/node':
         specifier: ^22.10.2

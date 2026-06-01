@@ -1,0 +1,11 @@
+{
+  "bridgeUrl": "http://localhost:4317",
+  "token": "change-me-dev-token",
+  "author": "your name",
+  "origin": "local",
+  "bridge": {
+    "port": 4317,
+    "host": "127.0.0.1",
+    "dataDir": ".rrw/.rrw-data"
+  }
+}

@@ -39,13 +39,35 @@ Claude will: clone the tool → build & **vendor the overlay** (a self-contained
 - **agent** (`packages/agent`) — the `rrw` CLI + the `rrw-process` skill the
   Claude session uses to apply comments, report progress, and ask via the web.
 
+## Configuration — `rrw.config.json`
+
+One file at the **project root** configures all three sides (bridge, `rrw` CLI,
+overlay loader). Copy `rrw.config.example.json` → `rrw.config.json`:
+
+```json
+{
+  "bridgeUrl": "http://localhost:4317",
+  "token": "change-me-dev-token",
+  "author": "your name",
+  "bridge": { "port": 4317, "host": "127.0.0.1", "dataDir": ".rrw/.rrw-data" }
+}
+```
+
+- The bridge + agent find it by walking up from their working dir; the overlay
+  loader imports it directly.
+- **Precedence**: defaults < `rrw.config.json` < env. So a server can keep the
+  real token out of the committed file and pass `RRW_TOKEN` (and
+  `RRW_BRIDGE_URL`, `RRW_PORT`, `RRW_HOST`, `RRW_DATA_DIR`, `RRW_AUTHOR`,
+  `RRW_ORIGIN`) via the environment.
+- The browser overlay needs a token client-side, so use a **low-trust** value
+  there; never put a high-trust/remote token in code shipped to the browser.
+
 ## Run the bridge
 
 ```bash
 cd .rrw && pnpm install
-RRW_TOKEN=<your-token> pnpm --filter @rrw/bridge start   # prints URL + token
+pnpm --filter @rrw/bridge start   # reads rrw.config.json; prints URL + token
 ```
-Config (env): `RRW_PORT` (4317), `RRW_HOST` (127.0.0.1), `RRW_TOKEN`, `RRW_DATA_DIR`.
 
 ## Remote (comment from anywhere)
 
