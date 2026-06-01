@@ -5,6 +5,9 @@ description: Process design-comment requests from the roto-remote-works bridge. 
 
 # rrw-process — apply design comments
 
+> This is the **Claude adapter** of the agent-neutral protocol in
+> `docs/PROTOCOL.md` (Codex/others have their own adapter in `adapters/`).
+
 You process design feedback left via the overlay. The bridge is the source of
 truth; you talk to it through the `rrw` CLI (provided by setup — see the project
 `README`; it wraps `@rrw/agent` with `RRW_BRIDGE_URL` + `RRW_TOKEN`).
