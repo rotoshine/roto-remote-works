@@ -1,6 +1,7 @@
 {
   "bridgeUrl": "http://localhost:4317",
   "token": "change-me-dev-token",
+  "clientToken": "change-me-low-trust-token",
   "author": "your name",
   "origin": "local",
   "processing": {

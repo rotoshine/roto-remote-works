@@ -13,13 +13,15 @@ const cfg = loadConfig();
 const { port, host, dataDir } = cfg.bridge;
 // Always run with a token; generate an ephemeral one if none was configured.
 const token = cfg.token || randomUUID();
+const clientToken = cfg.clientToken ?? undefined;
 
 const store = new Store({ file: join(dataDir, "comments.json") });
-const app = createApp({ store, token });
+const app = createApp({ store, token, clientToken });
 
 serve({ fetch: app.fetch, port, hostname: host }, (info) => {
   console.log(`[rrw-bridge] listening on http://${host}:${info.port}`);
-  console.log(`[rrw-bridge] token:    ${token}`);
-  console.log(`[rrw-bridge] data dir: ${dataDir}`);
-  if (cfg.source) console.log(`[rrw-bridge] config:   ${cfg.source}`);
+  console.log(`[rrw-bridge] token:        ${token}`);
+  if (clientToken) console.log(`[rrw-bridge] clientToken:  ${clientToken} (low-trust, overlay)`);
+  console.log(`[rrw-bridge] data dir:     ${dataDir}`);
+  if (cfg.source) console.log(`[rrw-bridge] config:       ${cfg.source}`);
 });

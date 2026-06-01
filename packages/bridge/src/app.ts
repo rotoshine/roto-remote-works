@@ -1,15 +1,25 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import type { Context, Next } from "hono";
 import type { ApplyOrigin, NewComment, NewQuestion, Store, StatusPatch } from "./store";
 
 export interface AppOptions {
   store: Store;
+  /** High-trust token (agent / code edits). */
   token: string;
+  /**
+   * Optional low-trust token for the browser overlay. When set, that token may
+   * only comment/read/answer/apply; agent-only routes return 403. When omitted,
+   * the single `token` authorizes everything (backward-compatible).
+   */
+  clientToken?: string;
   corsOrigin?: string | string[];
 }
 
-export function createApp(opts: AppOptions): Hono {
-  const app = new Hono();
+type Tier = "agent" | "client";
+
+export function createApp(opts: AppOptions): Hono<{ Variables: { tier: Tier } }> {
+  const app = new Hono<{ Variables: { tier: Tier } }>();
   const { store } = opts;
 
   app.use(
@@ -21,13 +31,21 @@ export function createApp(opts: AppOptions): Hono {
     }),
   );
 
-  // Bearer-token auth (preflight OPTIONS is already handled by cors()).
+  // Bearer-token auth + trust tier (preflight OPTIONS handled by cors()).
   app.use("*", async (c, next) => {
-    if (c.req.header("authorization") !== `Bearer ${opts.token}`) {
-      return c.json({ error: "unauthorized" }, 401);
-    }
+    const auth = c.req.header("authorization");
+    const isAgent = auth === `Bearer ${opts.token}`;
+    const isClient = opts.clientToken !== undefined && auth === `Bearer ${opts.clientToken}`;
+    if (!isAgent && !isClient) return c.json({ error: "unauthorized" }, 401);
+    c.set("tier", isAgent ? "agent" : "client");
     await next();
   });
+
+  // Guard agent-only routes: the low-trust client token gets 403.
+  const requireAgent = async (c: Context<{ Variables: { tier: Tier } }>, next: Next) => {
+    if (c.get("tier") !== "agent") return c.json({ error: "forbidden" }, 403);
+    await next();
+  };
 
   // ── comments ──
   app.get("/comments", async (c) => c.json(await store.listComments()));
@@ -35,13 +53,13 @@ export function createApp(opts: AppOptions): Hono {
     const body = (await c.req.json()) as NewComment;
     return c.json(await store.addComment(body), 201);
   });
-  app.patch("/comments/:id", async (c) => {
+  app.patch("/comments/:id", requireAgent, async (c) => {
     const body = await c.req.json();
-    const updated = await store.patchComment(c.req.param("id"), body);
+    const updated = await store.patchComment(c.req.param("id")!, body);
     return updated ? c.json(updated) : c.json({ error: "not found" }, 404);
   });
-  app.get("/comments/:id/screenshot", async (c) => {
-    const buf = await store.getScreenshot(c.req.param("id"));
+  app.get("/comments/:id/screenshot", requireAgent, async (c) => {
+    const buf = await store.getScreenshot(c.req.param("id")!);
     if (!buf) return c.json({ error: "not found" }, 404);
     return c.body(new Uint8Array(buf), 200, { "content-type": "image/png" });
   });
@@ -62,21 +80,21 @@ export function createApp(opts: AppOptions): Hono {
     if (result.ok) return c.json(result.request, 202);
     return c.json({ error: result.reason }, result.reason === "busy" ? 409 : 400);
   });
-  app.get("/request", async (c) => c.json(await store.getRequest()));
-  app.delete("/request", async (c) => {
+  app.get("/request", requireAgent, async (c) => c.json(await store.getRequest()));
+  app.delete("/request", requireAgent, async (c) => {
     await store.clearRequest();
     return c.json({ ok: true });
   });
 
   // ── status (progress) ──
   app.get("/status", async (c) => c.json(await store.getStatus()));
-  app.patch("/status", async (c) => {
+  app.patch("/status", requireAgent, async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as StatusPatch;
     return c.json(await store.setStatus(body));
   });
 
   // ── question (web-ask) ──
-  app.post("/question", async (c) => {
+  app.post("/question", requireAgent, async (c) => {
     const body = (await c.req.json()) as NewQuestion;
     return c.json(await store.postQuestion(body), 201);
   });

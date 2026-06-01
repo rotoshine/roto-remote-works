@@ -165,3 +165,69 @@ describe("bridge app — CORS", () => {
     expect(res.headers.get("access-control-allow-origin")).toBeTruthy();
   });
 });
+
+describe("bridge app — two-token tiers", () => {
+  const AGENT = "agent-secret";
+  const CLIENT = "client-low";
+
+  async function twoTokenSetup() {
+    const dir = await mkdtemp(join(tmpdir(), "rrw-app-2t-"));
+    let n = 0;
+    const store = new Store({
+      file: join(dir, "comments.json"),
+      id: () => `id-${++n}`,
+      now: () => "2026-05-31T00:00:00.000Z",
+    });
+    const app = createApp({ store, token: AGENT, clientToken: CLIENT });
+    const as =
+      (tok: string) =>
+      (path: string, init: RequestInit = {}) =>
+        app.request(path, {
+          ...init,
+          headers: { authorization: `Bearer ${tok}`, "content-type": "application/json", ...(init.headers ?? {}) },
+        });
+    return { app, store, agent: as(AGENT), client: as(CLIENT) };
+  }
+
+  it("client token may comment, read state, request apply, answer/clear", async () => {
+    const { client } = await twoTokenSetup();
+    expect((await client("/comments", { method: "POST", body: JSON.stringify({ comment: "hi" }) })).status).toBe(201);
+    expect((await client("/comments")).status).toBe(200);
+    expect((await client("/status")).status).toBe(200);
+    expect((await client("/question")).status).toBe(200);
+    expect((await client("/apply", { method: "POST", body: JSON.stringify({ origin: "remote" }) })).status).toBe(202);
+    // answering a (missing) question is allowed → 404, not 403
+    expect(
+      (await client("/question/x/answer", { method: "POST", body: JSON.stringify({ answer: "a" }) })).status,
+    ).not.toBe(403);
+    expect((await client("/comments", { method: "DELETE" })).status).toBe(200);
+  });
+
+  it("client token is FORBIDDEN (403) on agent-only routes", async () => {
+    const { client } = await twoTokenSetup();
+    expect((await client("/comments/x", { method: "PATCH", body: JSON.stringify({ status: "resolved" }) })).status).toBe(403);
+    expect((await client("/status", { method: "PATCH", body: JSON.stringify({ state: "applying" }) })).status).toBe(403);
+    expect((await client("/question", { method: "POST", body: JSON.stringify({ text: "q" }) })).status).toBe(403);
+    expect((await client("/request")).status).toBe(403);
+    expect((await client("/request", { method: "DELETE" })).status).toBe(403);
+    expect((await client("/comments/x/screenshot")).status).toBe(403);
+  });
+
+  it("agent token may call agent-only routes", async () => {
+    const { agent } = await twoTokenSetup();
+    expect((await agent("/status", { method: "PATCH", body: JSON.stringify({ state: "applying" }) })).status).toBe(200);
+    expect((await agent("/request")).status).toBe(200);
+    expect((await agent("/question", { method: "POST", body: JSON.stringify({ text: "q" }) })).status).toBe(201);
+  });
+
+  it("rejects an unknown token with 401", async () => {
+    const { app } = await twoTokenSetup();
+    expect((await app.request("/comments", { headers: { authorization: "Bearer nope" } })).status).toBe(401);
+  });
+
+  it("single-token mode (no clientToken) keeps agent-only routes open to the one token", async () => {
+    const { call } = await setup();
+    expect((await call("/status", { method: "PATCH", body: JSON.stringify({ state: "idle" }) })).status).toBe(200);
+    expect((await call("/request")).status).toBe(200);
+  });
+});

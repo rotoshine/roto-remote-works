@@ -30,16 +30,20 @@ Create `components/rrw/RrwOverlay.tsx` (reads the shared `rrw.config.json` — s
 ```tsx
 "use client";
 import { useEffect } from "react";
-import rrwConfig from "@/rrw.config.json"; // bridgeUrl, token, author
+import rrwConfig from "@/rrw.config.json";
+// The browser only needs the LOW-trust token. The whole JSON is bundled, so in
+// two-token mode keep the high-trust `token` OUT of this file (set RRW_TOKEN env
+// on the bridge/agent hosts) — see step 5.
+const cfg = rrwConfig as { bridgeUrl?: string; clientToken?: string; token?: string; author?: string };
 export function RrwOverlay() {
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
     let unmount: (() => void) | undefined;
     import("./overlay.js").then((m) => {
       unmount = m.mountOverlay({
-        bridgeUrl: rrwConfig.bridgeUrl ?? "http://localhost:4317",
-        token: rrwConfig.token ?? "",
-        author: rrwConfig.author,
+        bridgeUrl: cfg.bridgeUrl ?? "http://localhost:4317",
+        token: cfg.clientToken ?? cfg.token ?? "",
+        author: cfg.author,
       });
     });
     return () => unmount?.();
@@ -73,11 +77,14 @@ can stay in env on a server).
 - **`processing.delivery`**: `in-place` (default — edits hot-reload, for local/HMR)
   or `pr` (worker opens a PR off `processing.base` instead of writing the tree, for
   built/deployed servers). Set `pr` only with `gh` auth + push rights on that host.
-- **Local**: keep `bridgeUrl` at localhost; set any `token` (overlay needs it client-side).
-- **Remote**: set `bridgeUrl` to the gated host (Tailscale/Cloudflare Access). Keep the
-  real token **out of the committed file** — supply it via `RRW_TOKEN` on the bridge
-  and agent hosts (env overrides the file). The browser overlay still needs a token,
-  so use a low-trust value there.
+- **Local (single token)**: keep `bridgeUrl` at localhost; set any `token` — fine for
+  the browser to hold on localhost.
+- **Remote / standalone (two tokens)**: add a low-trust **`clientToken`** for the
+  overlay; the bridge accepts it for comment/read/answer/apply but returns 403 on
+  agent-only routes (resolve, status, ask, request, screenshots). The overlay bundles
+  this file, so **keep the high-trust `token` OUT of it** — supply `token` via
+  `RRW_TOKEN` env on the bridge + agent hosts (env overrides file). Point `bridgeUrl`
+  at the gated host (Tailscale/Cloudflare Access).
 - Precedence: built-in defaults < `rrw.config.json` < env (`RRW_BRIDGE_URL`, `RRW_TOKEN`,
   `RRW_PORT`, `RRW_HOST`, `RRW_DATA_DIR`, `RRW_AUTHOR`, `RRW_ORIGIN`).
 

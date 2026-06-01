@@ -134,4 +134,11 @@ describe("loadConfig", () => {
     const fs = fakeFs({ "/proj/rrw.config.json": JSON.stringify({ processing: { delivery: "weird" } }) });
     expect(loadConfig({ cwd: "/proj", env: {}, fs }).processing.delivery).toBe("in-place");
   });
+
+  it("clientToken defaults to null, reads from file, env overrides", () => {
+    expect(loadConfig({ cwd: "/proj", env: {}, fs: fakeFs({}) }).clientToken).toBeNull();
+    const fs = fakeFs({ "/proj/rrw.config.json": JSON.stringify({ clientToken: "low-trust" }) });
+    expect(loadConfig({ cwd: "/proj", env: {}, fs }).clientToken).toBe("low-trust");
+    expect(loadConfig({ cwd: "/proj", env: { RRW_CLIENT_TOKEN: "env-low" }, fs }).clientToken).toBe("env-low");
+  });
 });

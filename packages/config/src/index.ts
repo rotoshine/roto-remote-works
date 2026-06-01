@@ -9,6 +9,8 @@ export type Delivery = "in-place" | "pr";
 export interface RrwConfigFile {
   bridgeUrl?: string;
   token?: string;
+  /** Low-trust token for the browser overlay (comment/read only). */
+  clientToken?: string;
   author?: string;
   origin?: "local" | "remote";
   bridge?: { port?: number; host?: string; dataDir?: string };
@@ -17,7 +19,10 @@ export interface RrwConfigFile {
 
 export interface ResolvedConfig {
   bridgeUrl: string;
+  /** High-trust token (agent / code edits; also the bridge's primary token). */
   token: string;
+  /** Low-trust token for the browser overlay; null = single-token mode. */
+  clientToken: string | null;
   author: string | null;
   origin: "local" | "remote";
   bridge: { port: number; host: string; dataDir: string };
@@ -95,6 +100,7 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   return {
     bridgeUrl: env.RRW_BRIDGE_URL ?? file.bridgeUrl ?? DEFAULT_BRIDGE_URL,
     token: env.RRW_TOKEN ?? file.token ?? "",
+    clientToken: env.RRW_CLIENT_TOKEN ?? file.clientToken ?? null,
     author: env.RRW_AUTHOR ?? file.author ?? null,
     origin: originRaw === "remote" ? "remote" : "local",
     bridge: {

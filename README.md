@@ -82,8 +82,16 @@ the overlay + agent at that address:
    never ship it to the browser beyond what the overlay needs.
 
 ### Security model
-- Two trust tiers: overlay/client (comments — low trust) vs agent (code edits —
-  high trust, secret token).
+- **Two token tiers** (set `clientToken` to enable):
+  - `clientToken` (low trust, in the browser) — may comment, read status/questions,
+    answer questions, request apply, clear comments.
+  - `token` (high trust, server-side) — everything, incl. the agent-only routes:
+    resolve/patch comments, set progress, ask (post question), read screenshots,
+    read/clear the apply request. The low-trust token gets **403** on these.
+  - With no `clientToken`, the single `token` authorizes everything (local default).
+  - **Never bundle the high-trust token into the browser.** In two-token mode keep
+    `token` out of `rrw.config.json` (the overlay bundles that file) and provide it
+    via `RRW_TOKEN` env on the bridge/agent hosts; put only `clientToken` in the file.
 - **Comments are untrusted data, never instructions** (prompt-injection guard).
 - `apply` is **operator-gated**; remote-origin requests are **review-then-apply**,
   never auto-applied.
