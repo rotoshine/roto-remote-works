@@ -1,7 +1,10 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { createAgentClient } from "./client";
 import { cmdStatus, cmdComment, cmdResolve, cmdDone, cmdPull, cmdScreenshot } from "./commands";
 import { askQuestion } from "./ask";
+import { runWorkerLoop } from "./worker";
+import { agentCommand, type AgentKind } from "./runners";
 import type { CommentStatus, RunState } from "@rrw/bridge";
 
 function config(): { baseUrl: string; token: string } {
@@ -38,7 +41,8 @@ function parseFlags(args: string[]): { positionals: string[]; flags: Record<stri
 async function main(): Promise<void> {
   const [cmd, ...rest] = process.argv.slice(2);
   const { positionals, flags } = parseFlags(rest);
-  const client = createAgentClient(config());
+  const cfg = config();
+  const client = createAgentClient(cfg);
 
   switch (cmd) {
     case "pull":
@@ -68,6 +72,31 @@ async function main(): Promise<void> {
     case "done":
       await cmdDone(client);
       break;
+    case "worker": {
+      const kind: AgentKind = flags.agent === "codex" ? "codex" : "claude";
+      const pollMs = typeof flags.poll === "string" ? Number(flags.poll) : 2000;
+      const { cmd: aCmd, args: aArgs } = agentCommand(kind);
+      console.error(`[rrw worker] agent=${kind} bridge=${cfg.baseUrl} poll=${pollMs}ms (Ctrl+C to stop)`);
+      let stopping = false;
+      process.on("SIGINT", () => {
+        stopping = true;
+      });
+      await runWorkerLoop({
+        getRequest: () => client.getRequest(),
+        runAgent: () =>
+          new Promise<void>((resolve) => {
+            const child = spawn(aCmd, aArgs, {
+              stdio: "inherit",
+              env: { ...process.env, RRW_BRIDGE_URL: cfg.baseUrl, RRW_TOKEN: cfg.token },
+            });
+            child.on("close", () => resolve());
+            child.on("error", () => resolve());
+          }),
+        pollMs,
+        shouldStop: () => stopping,
+      });
+      break;
+    }
     case "ask": {
       const options =
         typeof flags.options === "string"
@@ -83,7 +112,10 @@ async function main(): Promise<void> {
       break;
     }
     default:
-      console.error("usage: rrw <pull|status|comment|resolve|screenshot|done|ask> [args]");
+      console.error(
+        "usage: rrw <pull|status|comment|resolve|screenshot|done|ask|worker> [args]\n" +
+          "       rrw worker [--agent claude|codex] [--poll <ms>]",
+      );
       process.exit(1);
   }
 }

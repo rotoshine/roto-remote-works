@@ -66,6 +66,21 @@ the overlay + agent at that address:
 - `apply` is **operator-gated**; remote-origin requests are **review-then-apply**,
   never auto-applied.
 
+## Headless worker (test server · designers & PMs)
+
+So non-engineers can leave feedback and see it applied **without running an agent
+themselves**, run a persistent worker that polls the bridge and invokes an agent
+per request:
+
+```bash
+RRW_BRIDGE_URL=<bridge> RRW_TOKEN=<token> \
+  pnpm --filter @rrw/agent exec tsx src/cli.ts worker --agent claude   # or: --agent codex
+```
+
+It dedupes by request, processes **one batch at a time** (single-flight), and
+spawns the agent headlessly (`claude -p` / `codex exec`) pointed at the
+agent-neutral `docs/PROTOCOL.md`. See `adapters/` to add another agent.
+
 ## Packages
 - `packages/bridge` — Hono server + `rrw-bridge` CLI
 - `packages/overlay` — React overlay (vendored, Shadow DOM, self-contained CSS)
