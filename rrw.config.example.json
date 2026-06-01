@@ -5,7 +5,9 @@
   "origin": "local",
   "processing": {
     "mode": "session",
-    "agent": "claude"
+    "agent": "claude",
+    "delivery": "in-place",
+    "base": "main"
   },
   "bridge": {
     "port": 4317,

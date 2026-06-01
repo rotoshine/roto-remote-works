@@ -70,6 +70,9 @@ can stay in env on a server).
 - **`processing.mode`**: `session` (default, local dev — the operator's interactive
   agent applies via `rrw-process`) or `worker` (standalone/remote bridge — a headless
   `claude -p`/`codex exec` applies per request). `rrw run` dispatches on it.
+- **`processing.delivery`**: `in-place` (default — edits hot-reload, for local/HMR)
+  or `pr` (worker opens a PR off `processing.base` instead of writing the tree, for
+  built/deployed servers). Set `pr` only with `gh` auth + push rights on that host.
 - **Local**: keep `bridgeUrl` at localhost; set any `token` (overlay needs it client-side).
 - **Remote**: set `bridgeUrl` to the gated host (Tailscale/Cloudflare Access). Keep the
   real token **out of the committed file** — supply it via `RRW_TOKEN` on the bridge

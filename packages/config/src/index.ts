@@ -3,6 +3,8 @@ import { dirname, isAbsolute, join } from "node:path";
 
 export type RunMode = "session" | "worker";
 export type AgentKind = "claude" | "codex";
+/** How worker-applied edits land: written to the working tree, or opened as a PR. */
+export type Delivery = "in-place" | "pr";
 
 export interface RrwConfigFile {
   bridgeUrl?: string;
@@ -10,7 +12,7 @@ export interface RrwConfigFile {
   author?: string;
   origin?: "local" | "remote";
   bridge?: { port?: number; host?: string; dataDir?: string };
-  processing?: { mode?: RunMode; agent?: AgentKind };
+  processing?: { mode?: RunMode; agent?: AgentKind; delivery?: Delivery; base?: string };
 }
 
 export interface ResolvedConfig {
@@ -21,10 +23,13 @@ export interface ResolvedConfig {
   bridge: { port: number; host: string; dataDir: string };
   /**
    * How comments get applied:
-   * - `session`: the operator's interactive agent session (local dev / HMR).
-   * - `worker`: a standalone headless runner (`claude -p` / `codex exec`).
+   * - `mode`: `session` (operator's interactive agent, local/HMR) | `worker`
+   *   (standalone headless `claude -p`/`codex exec`).
+   * - `delivery`: `in-place` (write the working tree — local/HMR) | `pr` (open a
+   *   pull request — built/deployed server where edits can't hot-reload).
+   * - `base`: base branch for `pr` delivery.
    */
-  processing: { mode: RunMode; agent: AgentKind };
+  processing: { mode: RunMode; agent: AgentKind; delivery: Delivery; base: string };
   /** Absolute path of the config file that was loaded, or null. */
   source: string | null;
 }
@@ -85,6 +90,7 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
   const rawDataDir = env.RRW_DATA_DIR ?? file.bridge?.dataDir ?? ".rrw-data";
   const modeRaw = env.RRW_MODE ?? file.processing?.mode;
   const agentRaw = env.RRW_AGENT ?? file.processing?.agent;
+  const deliveryRaw = env.RRW_DELIVERY ?? file.processing?.delivery;
 
   return {
     bridgeUrl: env.RRW_BRIDGE_URL ?? file.bridgeUrl ?? DEFAULT_BRIDGE_URL,
@@ -99,6 +105,8 @@ export function loadConfig(opts: LoadOptions = {}): ResolvedConfig {
     processing: {
       mode: modeRaw === "worker" ? "worker" : "session",
       agent: agentRaw === "codex" ? "codex" : "claude",
+      delivery: deliveryRaw === "pr" ? "pr" : "in-place",
+      base: env.RRW_BASE ?? file.processing?.base ?? "main",
     },
     source,
   };

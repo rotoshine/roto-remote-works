@@ -109,9 +109,21 @@ rrw worker --agent codex  # force headless (same as run --mode worker)
   on a host that has the code checkout. `rrw ask` (web-ask) surfaces questions in
   the overlay so it works with no terminal.
 
-> **Roadmap (next phase):** in `worker` mode on a *built/deployed* server (not
-> HMR), applied changes should be opened as a **PR** instead of just written to
-> the working tree. Not implemented yet — today the worker edits files in place.
+### Delivery — where worker edits land (`processing.delivery`)
+
+| delivery | what the worker does after the agent edits | use for |
+|---|---|---|
+| `in-place` (default) | leaves the changes in the working tree | local / HMR / test server that hot-reloads |
+| `pr` | branches → commits → pushes → `gh pr create`, then returns to `base` | **built/deployed** servers that can't hot-reload (review-then-merge) |
+
+```bash
+rrw run --mode worker --delivery pr     # apply via PR (base = processing.base, default main)
+```
+
+In `pr` delivery the worker, per request: `git checkout <base> && git pull` →
+runs the agent → if the tree changed, opens a PR titled/bodied from the
+addressed comments (needs `gh` auth + push rights on that host). The PR is
+**review-then-merge** — nothing auto-deploys.
 
 ## Headless worker (test server · designers & PMs)
 

@@ -5,10 +5,16 @@ import { cmdStatus, cmdComment, cmdResolve, cmdDone, cmdPull, cmdScreenshot } fr
 import { askQuestion } from "./ask";
 import { runWorkerLoop } from "./worker";
 import { agentCommand, resolveRunner, type AgentKind, type RunMode } from "./runners";
+import { makeApply, type Delivery } from "./apply";
+import { openPullRequest, type CmdRunner } from "./pr";
 import { loadConfig } from "@rrw/config";
 import type { CommentStatus, RunState } from "@rrw/bridge";
 
-function config(): { baseUrl: string; token: string; processing: { mode: RunMode; agent: AgentKind } } {
+function config(): {
+  baseUrl: string;
+  token: string;
+  processing: { mode: RunMode; agent: AgentKind; delivery: Delivery; base: string };
+} {
   // rrw.config.json (nearest ancestor) supplies bridgeUrl + token + processing
   // mode; env (RRW_BRIDGE_URL / RRW_TOKEN / RRW_MODE / RRW_AGENT) overrides it.
   const cfg = loadConfig();
@@ -19,22 +25,43 @@ function config(): { baseUrl: string; token: string; processing: { mode: RunMode
   return { baseUrl: cfg.bridgeUrl, token: cfg.token, processing: cfg.processing };
 }
 
-/** Headless worker loop: poll the bridge and spawn the agent per request. */
+/** Run an external command capturing its output (for git/gh in pr delivery). */
+const cmdRunner: CmdRunner = (cmd, args) =>
+  new Promise((resolve) => {
+    const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    let err = "";
+    child.stdout?.on("data", (d) => (out += String(d)));
+    child.stderr?.on("data", (d) => (err += String(d)));
+    child.on("close", (code) => resolve({ code: code ?? 0, stdout: out, stderr: err }));
+    child.on("error", (e) => resolve({ code: 1, stdout: out, stderr: e instanceof Error ? e.message : String(e) }));
+  });
+
+/**
+ * Headless worker loop: poll the bridge and, per request, spawn the agent —
+ * then (delivery="pr") open a PR for the changes instead of leaving them in the
+ * working tree (built/deployed servers can't hot-reload).
+ */
 async function startWorker(
   client: AgentClient,
   baseUrl: string,
   token: string,
-  kind: AgentKind,
+  choice: { agent: AgentKind; delivery: Delivery; base: string },
   pollMs: number,
 ): Promise<void> {
-  const { cmd: aCmd, args: aArgs } = agentCommand(kind);
-  console.error(`[rrw worker] agent=${kind} bridge=${baseUrl} poll=${pollMs}ms (Ctrl+C to stop)`);
+  const { agent, delivery, base } = choice;
+  const { cmd: aCmd, args: aArgs } = agentCommand(agent);
+  console.error(
+    `[rrw worker] agent=${agent} delivery=${delivery} bridge=${baseUrl} poll=${pollMs}ms (Ctrl+C to stop)`,
+  );
   let stopping = false;
   process.on("SIGINT", () => {
     stopping = true;
   });
-  await runWorkerLoop({
-    getRequest: () => client.getRequest(),
+
+  const apply = makeApply({
+    delivery,
+    base,
     runAgent: () =>
       new Promise<void>((resolve) => {
         const child = spawn(aCmd, aArgs, {
@@ -44,9 +71,29 @@ async function startWorker(
         child.on("close", () => resolve());
         child.on("error", () => resolve());
       }),
+    listComments: () => client.listComments(),
+    openPr: (content, b) => openPullRequest(cmdRunner, content, b),
+    prepare:
+      delivery === "pr"
+        ? async () => {
+            await cmdRunner("git", ["checkout", base]);
+            await cmdRunner("git", ["pull", "--ff-only"]);
+          }
+        : undefined,
+    log: (m) => console.error(m),
+  });
+
+  await runWorkerLoop({
+    getRequest: () => client.getRequest(),
+    runAgent: apply,
     pollMs,
     shouldStop: () => stopping,
   });
+}
+
+/** Resolve delivery from a `--delivery` flag, falling back to config. */
+function deliveryOf(flags: Record<string, string | boolean>, fallback: Delivery): Delivery {
+  return flags.delivery === "pr" ? "pr" : flags.delivery === "in-place" ? "in-place" : fallback;
 }
 
 function parseFlags(args: string[]): { positionals: string[]; flags: Record<string, string | boolean> } {
@@ -107,7 +154,7 @@ async function main(): Promise<void> {
     case "worker": {
       const { agent } = resolveRunner(cfg.processing, { mode: "worker", agent: flags.agent });
       const pollMs = typeof flags.poll === "string" ? Number(flags.poll) : 2000;
-      await startWorker(client, cfg.baseUrl, cfg.token, agent, pollMs);
+      await startWorker(client, cfg.baseUrl, cfg.token, { agent, delivery: deliveryOf(flags, cfg.processing.delivery), base: cfg.processing.base }, pollMs);
       break;
     }
     case "run": {
@@ -115,7 +162,7 @@ async function main(): Promise<void> {
       const { mode, agent } = resolveRunner(cfg.processing, { mode: flags.mode, agent: flags.agent });
       if (mode === "worker") {
         const pollMs = typeof flags.poll === "string" ? Number(flags.poll) : 2000;
-        await startWorker(client, cfg.baseUrl, cfg.token, agent, pollMs);
+        await startWorker(client, cfg.baseUrl, cfg.token, { agent, delivery: deliveryOf(flags, cfg.processing.delivery), base: cfg.processing.base }, pollMs);
       } else {
         // session mode: nothing to daemonize — the operator's interactive agent
         // session applies comments via the rrw-process skill (local/HMR).

@@ -109,4 +109,29 @@ describe("loadConfig", () => {
     expect(c.processing.mode).toBe("session");
     expect(c.processing.agent).toBe("claude");
   });
+
+  it("defaults processing.delivery to in-place and base to main", () => {
+    const c = loadConfig({ cwd: "/proj", env: {}, fs: fakeFs({}) });
+    expect(c.processing.delivery).toBe("in-place");
+    expect(c.processing.base).toBe("main");
+  });
+
+  it("reads processing.delivery/base from the file", () => {
+    const fs = fakeFs({ "/proj/rrw.config.json": JSON.stringify({ processing: { delivery: "pr", base: "develop" } }) });
+    const c = loadConfig({ cwd: "/proj", env: {}, fs });
+    expect(c.processing.delivery).toBe("pr");
+    expect(c.processing.base).toBe("develop");
+  });
+
+  it("env RRW_DELIVERY/RRW_BASE override delivery/base", () => {
+    const fs = fakeFs({ "/proj/rrw.config.json": JSON.stringify({ processing: { delivery: "pr", base: "develop" } }) });
+    const c = loadConfig({ cwd: "/proj", env: { RRW_DELIVERY: "in-place", RRW_BASE: "main" }, fs });
+    expect(c.processing.delivery).toBe("in-place");
+    expect(c.processing.base).toBe("main");
+  });
+
+  it("normalizes unknown delivery to in-place", () => {
+    const fs = fakeFs({ "/proj/rrw.config.json": JSON.stringify({ processing: { delivery: "weird" } }) });
+    expect(loadConfig({ cwd: "/proj", env: {}, fs }).processing.delivery).toBe("in-place");
+  });
 });
