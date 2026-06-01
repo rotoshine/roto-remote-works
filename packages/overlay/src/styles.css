@@ -18,6 +18,14 @@
     border: 0;
   }
 
+  /* inspector-style outline that tracks the hovered element while selecting */
+  .rrw-highlight {
+    @apply fixed z-[2147483100] rounded-sm border-2 border-primary;
+    pointer-events: none;
+    box-sizing: border-box;
+    background: rgba(37, 99, 235, 0.08);
+  }
+
   .rrw-card {
     @apply fixed rounded-xl border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl;
     pointer-events: auto;

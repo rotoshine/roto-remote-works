@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DesignCommentOverlay } from "./DesignCommentOverlay";
 import type { BridgeClient } from "./client";
@@ -48,6 +48,32 @@ describe("DesignCommentOverlay", () => {
     expect(await screen.findByText("Which color?")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "blue" }));
     expect(answer).toHaveBeenCalledWith("q1", "blue");
+  });
+
+  it("shows an inspector-style highlight over the hovered element while selecting", async () => {
+    const target = document.createElement("div");
+    target.textContent = "hover me";
+    document.body.appendChild(target);
+    target.getBoundingClientRect = () =>
+      ({ x: 10, y: 20, width: 100, height: 40, top: 20, left: 10, right: 110, bottom: 60, toJSON() {} }) as DOMRect;
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = () => target;
+    try {
+      render(<DesignCommentOverlay client={fakeClient()} />);
+      // not selecting yet → no highlight
+      expect(document.querySelector("[data-rrw-highlight]")).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: /코멘트/ })); // enter selecting mode
+      fireEvent.mouseMove(target, { clientX: 50, clientY: 30 });
+      const hl = document.querySelector("[data-rrw-highlight]") as HTMLElement | null;
+      expect(hl).not.toBeNull();
+      expect(hl!.style.left).toBe("10px");
+      expect(hl!.style.top).toBe("20px");
+      expect(hl!.style.width).toBe("100px");
+      expect(hl!.style.height).toBe("40px");
+    } finally {
+      document.elementFromPoint = orig;
+      target.remove();
+    }
   });
 
   it("shows progress (current step + comment) while a run is applying", async () => {

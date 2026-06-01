@@ -34,6 +34,7 @@ export function DesignCommentOverlay({
   const [panelOpen, setPanelOpen] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [draftText, setDraftText] = useState("");
+  const [hover, setHover] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
 
   const poll = useCallback(async () => {
     try {
@@ -60,10 +61,23 @@ export function DesignCommentOverlay({
   const open = active.filter((c) => c.status === "open");
   const running = status.state === "applying" || status.state === "queued";
 
-  // comment-mode: click an element on the host page to start a draft
+  // comment-mode: hover-highlight the element under the cursor (inspector-style),
+  // click to start a draft, Esc to exit.
   useEffect(() => {
-    if (mode !== "selecting") return;
+    if (mode !== "selecting") {
+      setHover(null);
+      return;
+    }
     const isUi = (t: EventTarget | null) => t instanceof Element && !!t.closest("[data-rrw-ui]");
+    const onMove = (e: MouseEvent) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el || isUi(el)) {
+        setHover(null);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      setHover({ left: r.left, top: r.top, width: r.width, height: r.height });
+    };
     const onClick = (e: MouseEvent) => {
       if (isUi(e.target)) return;
       e.preventDefault();
@@ -72,18 +86,22 @@ export function DesignCommentOverlay({
       if (!el || isUi(el)) return;
       setDraft({ ...capture(el), px: e.clientX, py: e.clientY });
       setDraftText("");
+      setHover(null);
       setMode("off");
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMode("off");
     };
+    document.addEventListener("mousemove", onMove, true);
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKey, true);
     document.body.style.cursor = "crosshair";
     return () => {
+      document.removeEventListener("mousemove", onMove, true);
       document.removeEventListener("click", onClick, true);
       document.removeEventListener("keydown", onKey, true);
       document.body.style.cursor = "";
+      setHover(null);
     };
   }, [mode]);
 
@@ -123,6 +141,14 @@ export function DesignCommentOverlay({
 
   return (
     <div data-rrw-ui className="rrw-root">
+      {mode === "selecting" && hover && (
+        <div
+          data-rrw-highlight
+          className="rrw-highlight"
+          style={{ left: hover.left, top: hover.top, width: hover.width, height: hover.height }}
+        />
+      )}
+
       {question && question.status === "pending" && (
         <div className="rrw-backdrop">
           <WebAskModal question={question} onAnswer={answer} onCancel={cancelQuestion} />
