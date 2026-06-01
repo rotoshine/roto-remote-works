@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { loadConfig } from "@rrw/config";
 import { Store } from "./store";
 import { createApp } from "./app";
+import { bindAdvice } from "./net";
 
 // rrw.config.json (if present) supplies bridge.port/host/dataDir + token;
 // env vars (RRW_PORT/RRW_HOST/RRW_DATA_DIR/RRW_TOKEN) override it. Bind to
@@ -24,4 +25,6 @@ serve({ fetch: app.fetch, port, hostname: host }, (info) => {
   if (clientToken) console.log(`[rrw-bridge] clientToken:  ${clientToken} (low-trust, overlay)`);
   console.log(`[rrw-bridge] data dir:     ${dataDir}`);
   if (cfg.source) console.log(`[rrw-bridge] config:       ${cfg.source}`);
+  const advice = bindAdvice(host);
+  if (advice) console.warn(advice);
 });

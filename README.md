@@ -69,17 +69,42 @@ cd .rrw && pnpm install
 pnpm --filter @rrw/bridge start   # reads rrw.config.json; prints URL + token
 ```
 
-## Remote (comment from anywhere)
+## Remote (comment from anywhere) — Tailscale runbook
 
-Do **not** expose the bridge publicly. Put it behind **network gating** and point
-the overlay + agent at that address:
+Do **not** expose the bridge publicly. Put it behind **network gating** (here:
+Tailscale). On binding a non-loopback address the bridge prints a warning to this
+effect. End-to-end:
 
-1. Run the bridge on a host inside a **Tailscale tailnet** (or Cloudflare Access),
-   e.g. `RRW_HOST=0.0.0.0 RRW_TOKEN=… pnpm --filter @rrw/bridge start`.
-2. Set the overlay config and `RRW_BRIDGE_URL` to the tailnet address; share the
-   `RRW_TOKEN` (defense-in-depth).
-3. Only the tailnet members reach it. The **agent token is server-side only**;
-   never ship it to the browser beyond what the overlay needs.
+**On the bridge/agent host** (has the repo checkout):
+1. Join the tailnet: install Tailscale, `tailscale up`. Note the host's MagicDNS
+   name (e.g. `devbox.tailnet-xyz.ts.net`).
+2. `rrw.config.json` here holds the **high-trust** token (server-side, fine):
+   ```jsonc
+   { "bridgeUrl": "https://devbox.tailnet-xyz.ts.net:4317",
+     "token": "<HIGH-trust>", "clientToken": "<LOW-trust>",
+     "processing": { "mode": "worker", "delivery": "pr", "base": "main" },
+     "bridge": { "host": "0.0.0.0", "port": 4317 } }
+   ```
+3. Start the bridge: `pnpm --filter @rrw/bridge --dir .rrw start` (binds 0.0.0.0 →
+   reachable only on the tailnet). Only tailnet members can reach it.
+4. Run the worker: `cd .rrw && ./rrw run` (mode=worker, delivery=pr). It applies
+   each request and opens a PR (`gh` must be authed + push rights on this host).
+   `rrw ask` surfaces questions in the overlay — no terminal needed.
+
+**In the deployed app** (what designers/PMs load):
+5. Build with `rrw.config.json` containing **only** `bridgeUrl` (the MagicDNS
+   address) + `clientToken` + `author` — **never the high-trust `token`** (the
+   overlay bundles this file). Supply the bridge's high-trust token via `RRW_TOKEN`
+   env on the host instead.
+6. Designers/PMs on the tailnet open the app, leave comments; the worker turns
+   them into PRs. The low-trust token can't resolve/ask/read screenshots (403).
+
+> Cloudflare Access works the same way — gate the host, point `bridgeUrl` at it.
+
+**Verified locally** (Tailscale tunnel aside): the bridge bound to `0.0.0.0` is
+reachable over a non-loopback address with both tiers enforced (401 / client 200
+read but 403 on agent routes / agent 200). On your tailnet, swap the LAN address
+for the MagicDNS name + lock down with tailnet ACLs.
 
 ### Security model
 - **Two token tiers** (set `clientToken` to enable):
