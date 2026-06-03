@@ -1,6 +1,30 @@
 {
   "name": "roto-remote-works",
+  "version": "0.1.0",
+  "description": "실행 중인 React 앱에 코멘트를 남기면 Claude/Codex 에이전트가 코드를 수정하는 비주얼 피드백 도구 (bridge + overlay + agent)",
+  "license": "MIT",
+  "author": "rotoshine",
   "private": true,
+  "homepage": "https://github.com/rotoshine/roto-remote-works#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rotoshine/roto-remote-works.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rotoshine/roto-remote-works/issues"
+  },
+  "keywords": [
+    "react",
+    "design-feedback",
+    "visual-editing",
+    "claude",
+    "claude-code",
+    "codex",
+    "agent",
+    "overlay",
+    "hono",
+    "developer-tools"
+  ],
   "packageManager": "pnpm@11.1.3",
   "engines": {
     "node": ">=22"

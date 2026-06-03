@@ -185,3 +185,13 @@ pnpm -r test        # 전체 패키지
 pnpm -r typecheck
 pnpm --filter @rrw/overlay build   # → packages/overlay/dist/overlay.js
 ```
+
+## 문서
+- [아키텍처](./docs/ARCHITECTURE.md) — 데이터 흐름, 상태머신, 신뢰 경계(다이어그램)
+- [에이전트 프로토콜](./docs/PROTOCOL.md) — 에이전트-중립 처리 규약
+- [기여 가이드](./CONTRIBUTING.md) — 개발 셋업, TDD, 어댑터 추가
+- [보안](./SECURITY.md) — 위협 모델, 운영 수칙, 제보
+- [설계 스펙](./docs/specs/2026-05-31-design-comments-design.md)
+
+## 라이선스
+[MIT](./LICENSE) © rotoshine
