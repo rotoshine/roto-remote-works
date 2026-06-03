@@ -5,7 +5,7 @@ import type { BridgeClient } from "./client";
 
 const client = {
   listComments: async () => [],
-  getStatus: async () => ({ state: "idle", currentStep: null, perComment: {}, updatedAt: "t" }),
+  getStatus: async () => ({ state: "idle", currentStep: null, perComment: {}, result: null, updatedAt: "t" }),
   getQuestion: async () => null,
 } as unknown as BridgeClient;
 

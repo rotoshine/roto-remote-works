@@ -5,7 +5,7 @@ import { DesignCommentOverlay } from "./DesignCommentOverlay";
 import type { BridgeClient } from "./client";
 import type { Comment, CommentStatus, Question, Status } from "./types";
 
-const idle: Status = { state: "idle", currentStep: null, perComment: {}, updatedAt: "t" };
+const idle: Status = { state: "idle", currentStep: null, perComment: {}, result: null, updatedAt: "t" };
 
 function comment(id: string, text: string, status: CommentStatus = "open"): Comment {
   return {
@@ -76,9 +76,25 @@ describe("DesignCommentOverlay", () => {
     }
   });
 
+  it("shows a result banner with the PR link when an apply result is present", async () => {
+    const client = fakeClient({
+      getStatus: async () => ({
+        state: "done",
+        currentStep: null,
+        perComment: {},
+        result: { ok: true, prUrl: "https://github.com/o/r/pull/12", summary: "2 코멘트 적용", at: "t" },
+        updatedAt: "t",
+      }),
+    });
+    render(<DesignCommentOverlay client={client} pollMs={10} />);
+    expect(await screen.findByText(/2 코멘트 적용/)).toBeInTheDocument();
+    const link = await screen.findByRole("link", { name: /PR/ });
+    expect(link).toHaveAttribute("href", "https://github.com/o/r/pull/12");
+  });
+
   it("shows progress (current step + comment) while a run is applying", async () => {
     const client = fakeClient({
-      getStatus: async () => ({ state: "applying", currentStep: "fixing header", perComment: {}, updatedAt: "t" }),
+      getStatus: async () => ({ state: "applying", currentStep: "fixing header", perComment: {}, result: null, updatedAt: "t" }),
       listComments: async () => [comment("c1", "make bigger", "applying")],
     });
     render(<DesignCommentOverlay client={client} pollMs={10} />);

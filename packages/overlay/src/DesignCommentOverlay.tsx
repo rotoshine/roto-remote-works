@@ -16,7 +16,7 @@ export interface DesignCommentOverlayProps {
   author?: string;
 }
 
-const IDLE: Status = { state: "idle", currentStep: null, perComment: {}, updatedAt: "" };
+const IDLE: Status = { state: "idle", currentStep: null, perComment: {}, result: null, updatedAt: "" };
 
 type Draft = Captured & { px: number; py: number };
 
@@ -35,6 +35,7 @@ export function DesignCommentOverlay({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [draftText, setDraftText] = useState("");
   const [hover, setHover] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [dismissedResultAt, setDismissedResultAt] = useState<string | null>(null);
 
   const poll = useCallback(async () => {
     try {
@@ -158,6 +159,27 @@ export function DesignCommentOverlay({
       {running && (
         <div className="rrw-dock rrw-dock-progress">
           <ProgressPanel status={status} comments={active} />
+        </div>
+      )}
+
+      {status.result && status.result.at !== dismissedResultAt && (
+        <div className="rrw-card rrw-result">
+          <span className="rrw-result-icon">{status.result.ok ? "✅" : "⚠️"}</span>
+          <span className="rrw-result-text">
+            {status.result.summary ?? (status.result.ok ? "적용 완료" : "적용 실패")}
+          </span>
+          {status.result.prUrl && (
+            <a className="rrw-result-link" href={status.result.prUrl} target="_blank" rel="noreferrer">
+              PR 보기 ↗
+            </a>
+          )}
+          <button
+            className="rrw-btn rrw-btn-ghost"
+            type="button"
+            onClick={() => setDismissedResultAt(status.result?.at ?? null)}
+          >
+            닫기
+          </button>
         </div>
       )}
 

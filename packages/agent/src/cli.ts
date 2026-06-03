@@ -81,6 +81,14 @@ async function startWorker(
             await cmdRunner("git", ["pull", "--ff-only"]);
           }
         : undefined,
+    // surface the outcome (PR link) back to the overlay via status.result
+    reportResult: (r) =>
+      client
+        .setStatus({
+          state: r.ok ? "done" : "error",
+          result: { ok: r.ok, prUrl: r.prUrl ?? null, summary: r.summary ?? null, at: new Date().toISOString() },
+        })
+        .then(() => undefined),
     log: (m) => console.error(m),
   });
 
@@ -165,9 +173,16 @@ async function main(): Promise<void> {
       }
       break;
     }
-    case "done":
-      await cmdDone(client);
+    case "done": {
+      const pr = typeof flags.pr === "string" ? flags.pr : undefined;
+      const summary = typeof flags.summary === "string" ? flags.summary : undefined;
+      const result =
+        pr || summary
+          ? { ok: true, prUrl: pr ?? null, summary: summary ?? null, at: new Date().toISOString() }
+          : undefined;
+      await cmdDone(client, result);
       break;
+    }
     case "worker": {
       const { agent } = resolveRunner(cfg.processing, { mode: "worker", agent: flags.agent });
       const pollMs = typeof flags.poll === "string" ? Number(flags.poll) : 2000;

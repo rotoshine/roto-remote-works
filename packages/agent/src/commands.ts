@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import type { AgentClient } from "./client";
-import type { ApplyRequest, Comment, CommentStatus, RunState, Status } from "@rrw/bridge";
+import type { ApplyRequest, ApplyResultInfo, Comment, CommentStatus, RunState, Status } from "@rrw/bridge";
 
 export async function cmdStatus(
   client: AgentClient,
@@ -21,8 +21,8 @@ export async function cmdResolve(client: AgentClient, id: string): Promise<void>
   await cmdComment(client, id, "resolved");
 }
 
-export async function cmdDone(client: AgentClient): Promise<void> {
-  await client.setStatus({ state: "done" });
+export async function cmdDone(client: AgentClient, result?: ApplyResultInfo): Promise<void> {
+  await client.setStatus(result ? { state: "done", result } : { state: "done" });
   await client.clearRequest();
 }
 

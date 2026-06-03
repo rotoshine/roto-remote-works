@@ -64,10 +64,19 @@ export type ApplyResult =
 
 export type RunState = "idle" | "queued" | "applying" | "done" | "error";
 
+/** Outcome of an apply run, surfaced back to the overlay (e.g. a PR link). */
+export interface ApplyResultInfo {
+  ok: boolean;
+  prUrl?: string | null;
+  summary?: string | null;
+  at: string;
+}
+
 export interface Status {
   state: RunState;
   currentStep: string | null;
   perComment: Record<string, CommentStatus>;
+  result: ApplyResultInfo | null;
   updatedAt: string;
 }
 
@@ -75,6 +84,7 @@ export interface StatusPatch {
   state?: RunState;
   currentStep?: string | null;
   perComment?: Record<string, CommentStatus>;
+  result?: ApplyResultInfo | null;
 }
 
 export type QuestionStatus = "pending" | "answered" | "cancelled";
@@ -265,7 +275,7 @@ export class Store {
 
   // ── status (progress) ─────────────────────────────────────
   private defaultStatus(): Status {
-    return { state: "idle", currentStep: null, perComment: {}, updatedAt: this.now() };
+    return { state: "idle", currentStep: null, perComment: {}, result: null, updatedAt: this.now() };
   }
 
   getStatus(): Promise<Status> {
@@ -279,6 +289,7 @@ export class Store {
         state: patch.state ?? cur.state,
         currentStep: patch.currentStep !== undefined ? patch.currentStep : cur.currentStep,
         perComment: { ...cur.perComment, ...(patch.perComment ?? {}) },
+        result: patch.result !== undefined ? patch.result : (cur.result ?? null),
         updatedAt: this.now(),
       };
       await this.writeJson(this.path("status.json"), next);

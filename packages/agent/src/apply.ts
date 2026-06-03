@@ -20,6 +20,8 @@ export interface ApplyDeps {
   openPr: (content: PrContent, base: string) => Promise<PrResult>;
   /** Optional: e.g. checkout base + pull before the agent runs. */
   prepare?: () => Promise<void>;
+  /** Report the outcome back (e.g. to the bridge so the overlay shows the PR link). */
+  reportResult?: (r: { ok: boolean; prUrl?: string | null; summary?: string | null }) => Promise<void>;
   log?: (msg: string) => void;
 }
 
@@ -42,6 +44,14 @@ export function makeApply(deps: ApplyDeps): (req: { requestedAt: string }) => Pr
 
     const content = prContentFromComments(pending, req.requestedAt);
     const res = await deps.openPr(content, deps.base);
+
+    const summary = res.ok
+      ? `${pending.length} 코멘트 적용`
+      : res.noChanges
+        ? "변경 없음"
+        : (res.reason ?? "실패");
+    if (deps.reportResult) await deps.reportResult({ ok: res.ok, prUrl: res.url ?? null, summary });
+
     if (res.ok) deps.log?.(`[rrw] opened PR: ${res.url ?? "(created)"}`);
     else if (res.noChanges) deps.log?.("[rrw] no changes — no PR opened");
     else deps.log?.(`[rrw] PR failed: ${res.reason ?? "unknown"}`);

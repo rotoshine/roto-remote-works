@@ -57,6 +57,36 @@ describe("makeApply", () => {
     expect(seen.content!.branch).toBe("rrw/apply-2026-06-01T00-00-00-000Z");
   });
 
+  it("pr: reports the result (PR url + summary) via reportResult", async () => {
+    let reported: { ok: boolean; prUrl?: string | null; summary?: string | null } | null = null;
+    const apply = makeApply({
+      delivery: "pr",
+      base: "main",
+      runAgent: async () => {},
+      listComments: async () => [comment("a", "open", "PM"), comment("b", "open")],
+      openPr: async () => ({ ok: true, url: "https://x/pull/9" }),
+      reportResult: async (r) => void (reported = r),
+      log: () => {},
+    });
+    await apply({ requestedAt: "t" });
+    expect(reported).toMatchObject({ ok: true, prUrl: "https://x/pull/9" });
+    expect(reported!.summary).toMatch(/2/);
+  });
+
+  it("in-place: does not report a result", async () => {
+    let called = false;
+    const apply = makeApply({
+      delivery: "in-place",
+      base: "main",
+      runAgent: async () => {},
+      listComments: async () => [comment("a")],
+      openPr: async () => ({ ok: true }),
+      reportResult: async () => void (called = true),
+    });
+    await apply({ requestedAt: "t" });
+    expect(called).toBe(false);
+  });
+
   it("pr: logs when there are no changes", async () => {
     const logs: string[] = [];
     const apply = makeApply({

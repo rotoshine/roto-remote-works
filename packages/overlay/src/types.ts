@@ -57,10 +57,18 @@ export interface ApplyRequest {
 
 export type RunState = "idle" | "queued" | "applying" | "done" | "error";
 
+export interface ApplyResultInfo {
+  ok: boolean;
+  prUrl?: string | null;
+  summary?: string | null;
+  at: string;
+}
+
 export interface Status {
   state: RunState;
   currentStep: string | null;
   perComment: Record<string, CommentStatus>;
+  result: ApplyResultInfo | null;
   updatedAt: string;
 }
 
@@ -68,6 +76,7 @@ export interface StatusPatch {
   state?: RunState;
   currentStep?: string | null;
   perComment?: Record<string, CommentStatus>;
+  result?: ApplyResultInfo | null;
 }
 
 export type QuestionStatus = "pending" | "answered" | "cancelled";

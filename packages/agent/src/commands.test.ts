@@ -6,7 +6,7 @@ import { cmdStatus, cmdComment, cmdResolve, cmdDone, cmdPull, cmdScreenshot } fr
 import type { AgentClient } from "./client";
 import type { Comment, CommentStatus, Status } from "@rrw/bridge";
 
-const idle: Status = { state: "idle", currentStep: null, perComment: {}, updatedAt: "t" };
+const idle: Status = { state: "idle", currentStep: null, perComment: {}, result: null, updatedAt: "t" };
 
 function comment(id: string, text: string, status: CommentStatus): Comment {
   return {
@@ -59,6 +59,14 @@ describe("agent commands", () => {
     await cmdDone(fakeAgentClient({ setStatus, clearRequest }));
     expect(setStatus).toHaveBeenCalledWith({ state: "done" });
     expect(clearRequest).toHaveBeenCalled();
+  });
+
+  it("done can attach a result (PR link) for the overlay", async () => {
+    const setStatus = vi.fn(async () => idle);
+    const clearRequest = vi.fn(async () => {});
+    const result = { ok: true, prUrl: "https://x/pull/3", summary: "1 적용", at: "t" };
+    await cmdDone(fakeAgentClient({ setStatus, clearRequest }), result);
+    expect(setStatus).toHaveBeenCalledWith({ state: "done", result });
   });
 
   it("pull returns the request and the non-resolved comments", async () => {

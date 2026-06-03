@@ -64,7 +64,9 @@ truth; you talk to it through the `rrw` CLI (provided by setup — see the proje
 
 6. **Finish**
    ```bash
-   rrw done   # state=done + clears the request
+   rrw done --summary "히어로 간격 조정 등 2건 적용"   # 오버레이에 결과 배너 표시
+   # PR을 열었다면: rrw done --summary "…" --pr https://github.com/o/r/pull/123
+   # 요약이 필요 없으면 그냥: rrw done
    ```
 
 ## Arming the watch (so a button press wakes you)

@@ -37,7 +37,9 @@ here is agent-specific — the per-agent adapters in `adapters/` just wire this 
    ANSWER=$(rrw ask "질문" --options "a,b,c")   # shows in the overlay; blocks until answered/timeout
    ```
 
-6. **Finish.** `rrw done`  (sets state=done, clears the request)
+6. **Finish.** `rrw done`  (sets state=done, clears the request). Optionally
+   surface a result banner in the overlay: `rrw done --summary "<what you did>"`
+   (and `--pr <url>` if you opened a PR).
 
 ## Notes
 - `apply` is **single-flight** (the bridge returns 409 while a run is active) — one

@@ -24,6 +24,7 @@ const status = (over: Partial<Status> = {}): Status => ({
   state: "idle",
   currentStep: null,
   perComment: {},
+  result: null,
   updatedAt: "t",
   ...over,
 });

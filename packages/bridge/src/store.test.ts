@@ -186,6 +186,23 @@ describe("Store — status (progress)", () => {
     expect(s.currentStep).toBe("fixing header");
     expect(s.perComment).toEqual({ c1: "applying", c2: "resolved" });
   });
+
+  it("defaults result to null and persists an apply result", async () => {
+    const { store } = await tempStore();
+    expect((await store.getStatus()).result).toBeNull();
+
+    await store.setStatus({
+      state: "done",
+      result: { ok: true, prUrl: "https://github.com/o/r/pull/7", summary: "2 코멘트 적용", at: "t" },
+    });
+    const s = await store.getStatus();
+    expect(s.state).toBe("done");
+    expect(s.result).toEqual({ ok: true, prUrl: "https://github.com/o/r/pull/7", summary: "2 코멘트 적용", at: "t" });
+
+    // a later patch that doesn't touch result keeps it
+    await store.setStatus({ currentStep: "x" });
+    expect((await store.getStatus()).result?.prUrl).toBe("https://github.com/o/r/pull/7");
+  });
 });
 
 describe("Store — question (web-ask)", () => {

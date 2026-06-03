@@ -18,6 +18,22 @@
     border: 0;
   }
 
+  /* result banner (apply outcome / PR link) */
+  .rrw-result {
+    @apply fixed bottom-16 right-4 flex items-center gap-2 rounded-lg bg-white px-3 py-2 shadow-lg;
+    pointer-events: auto;
+    max-width: 22rem;
+  }
+  .rrw-result-icon {
+    @apply text-base;
+  }
+  .rrw-result-text {
+    @apply flex-1 text-slate-800;
+  }
+  .rrw-result-link {
+    @apply font-bold text-primary underline;
+  }
+
   /* inspector-style outline that tracks the hovered element while selecting */
   .rrw-highlight {
     @apply fixed z-[2147483100] rounded-sm border-2 border-primary;
