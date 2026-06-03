@@ -50,6 +50,33 @@ export interface LoadOptions {
 }
 
 export const CONFIG_FILE = "rrw.config.json";
+
+export interface InitOptions {
+  bridgeUrl?: string;
+  author?: string;
+  mode?: RunMode;
+  delivery?: Delivery;
+  base?: string;
+  /** Token generator (injected so it's testable); used for both tokens. */
+  genToken: () => string;
+}
+
+/** Build a fresh `rrw.config.json` object (with generated tokens) for `rrw init`. */
+export function buildInitConfig(opts: InitOptions): RrwConfigFile {
+  return {
+    bridgeUrl: opts.bridgeUrl ?? "http://localhost:4317",
+    token: opts.genToken(),
+    clientToken: opts.genToken(),
+    author: opts.author ?? "",
+    processing: {
+      mode: opts.mode ?? "session",
+      agent: "claude",
+      delivery: opts.delivery ?? "in-place",
+      base: opts.base ?? "main",
+    },
+    bridge: { port: 4317, host: "127.0.0.1", dataDir: ".rrw/.rrw-data" },
+  };
+}
 const DEFAULT_BRIDGE_URL = "http://localhost:4317";
 
 /** Find the config file by walking up from `cwd` to the filesystem root. */

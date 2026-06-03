@@ -4,7 +4,14 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { branchNameFor, prContentFromComments, openPullRequest, type CmdRunner } from "./pr";
+import {
+  branchNameFor,
+  prContentFromComments,
+  openPullRequest,
+  parseDefaultBranch,
+  resolveBase,
+  type CmdRunner,
+} from "./pr";
 
 const pexec = promisify(execFile);
 
@@ -22,6 +29,31 @@ function recorder(script: Record<string, { code?: number; stdout?: string; stder
 describe("branchNameFor", () => {
   it("makes a git-safe branch from a request timestamp", () => {
     expect(branchNameFor("2026-06-01T04:25:06.956Z")).toBe("rrw/apply-2026-06-01T04-25-06-956Z");
+  });
+});
+
+describe("parseDefaultBranch", () => {
+  it("strips the remote prefix from git symbolic-ref output", () => {
+    expect(parseDefaultBranch("origin/main\n")).toBe("main");
+    expect(parseDefaultBranch("origin/develop")).toBe("develop");
+    expect(parseDefaultBranch("trunk")).toBe("trunk");
+  });
+  it("returns null for empty output", () => {
+    expect(parseDefaultBranch("")).toBeNull();
+    expect(parseDefaultBranch("  \n")).toBeNull();
+  });
+});
+
+describe("resolveBase", () => {
+  it("returns the configured branch as-is when it is not 'auto'", () => {
+    expect(resolveBase("develop", "main")).toBe("develop");
+    expect(resolveBase("main", null)).toBe("main");
+  });
+  it("uses the detected branch when configured is 'auto'", () => {
+    expect(resolveBase("auto", "develop")).toBe("develop");
+  });
+  it("falls back to 'main' when 'auto' but nothing detected", () => {
+    expect(resolveBase("auto", null)).toBe("main");
   });
 });
 

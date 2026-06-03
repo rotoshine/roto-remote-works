@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { existsSync, writeFileSync } from "node:fs";
 import { createAgentClient, type AgentClient } from "./client";
 import { cmdStatus, cmdComment, cmdResolve, cmdDone, cmdPull, cmdScreenshot } from "./commands";
 import { askQuestion } from "./ask";
 import { runWorkerLoop } from "./worker";
+import { runWatch } from "./watch";
 import { agentCommand, resolveRunner, type AgentKind, type RunMode } from "./runners";
 import { makeApply, type Delivery } from "./apply";
-import { openPullRequest, type CmdRunner } from "./pr";
+import { openPullRequest, parseDefaultBranch, resolveBase, type CmdRunner } from "./pr";
 import { runDoctor } from "./doctor";
-import { loadConfig } from "@rrw/config";
+import { loadConfig, buildInitConfig } from "@rrw/config";
 import type { CommentStatus, RunState } from "@rrw/bridge";
 
 function config(): {
@@ -50,10 +53,16 @@ async function startWorker(
   choice: { agent: AgentKind; delivery: Delivery; base: string },
   pollMs: number,
 ): Promise<void> {
-  const { agent, delivery, base } = choice;
+  const { agent, delivery } = choice;
+  // base="auto" → detect the repo's default branch (pr delivery)
+  let base = choice.base;
+  if (delivery === "pr" && base === "auto") {
+    const r = await cmdRunner("git", ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
+    base = resolveBase("auto", r.code === 0 ? parseDefaultBranch(r.stdout) : null);
+  }
   const { cmd: aCmd, args: aArgs } = agentCommand(agent);
   console.error(
-    `[rrw worker] agent=${agent} delivery=${delivery} bridge=${baseUrl} poll=${pollMs}ms (Ctrl+C to stop)`,
+    `[rrw worker] agent=${agent} delivery=${delivery} base=${base} bridge=${baseUrl} poll=${pollMs}ms (Ctrl+C to stop)`,
   );
   let stopping = false;
   process.on("SIGINT", () => {
@@ -129,6 +138,25 @@ function parseFlags(args: string[]): { positionals: string[]; flags: Record<stri
 async function main(): Promise<void> {
   const [cmd, ...rest] = process.argv.slice(2);
   const { positionals, flags } = parseFlags(rest);
+
+  // `init` scaffolds rrw.config.json (no existing config/token needed).
+  if (cmd === "init") {
+    const out = typeof flags.out === "string" ? flags.out : "rrw.config.json";
+    if (existsSync(out) && flags.force !== true) {
+      console.error(`${out} already exists (use --force to overwrite)`);
+      process.exit(1);
+    }
+    const built = buildInitConfig({
+      genToken: () => randomBytes(24).toString("hex"),
+      bridgeUrl: typeof flags["bridge-url"] === "string" ? flags["bridge-url"] : undefined,
+      author: typeof flags.author === "string" ? flags.author : undefined,
+      mode: flags.mode === "worker" ? "worker" : undefined,
+      delivery: flags.delivery === "pr" ? "pr" : undefined,
+    });
+    writeFileSync(out, JSON.stringify(built, null, 2) + "\n");
+    console.log(`wrote ${out} (token + clientToken generated)`);
+    return;
+  }
 
   // `doctor` runs before the token gate so it can diagnose a missing token.
   if (cmd === "doctor") {
@@ -210,6 +238,27 @@ async function main(): Promise<void> {
       }
       break;
     }
+    case "watch": {
+      const once = flags.once === true;
+      const pollMs = typeof flags.poll === "string" ? Number(flags.poll) : 2000;
+      console.error(`[rrw watch] bridge=${cfg.baseUrl} poll=${pollMs}ms (Ctrl+C to stop)`);
+      let stopping = false;
+      process.on("SIGINT", () => {
+        stopping = true;
+      });
+      await runWatch({
+        getRequest: () => client.getRequest(),
+        onRequest: async (req) => {
+          const { comments } = await cmdPull(client);
+          console.log(`RRW-REQUEST ${req.requestedAt}`);
+          console.log(JSON.stringify(comments, null, 2));
+        },
+        once,
+        pollMs,
+        shouldStop: () => stopping,
+      });
+      break;
+    }
     case "ask": {
       const options =
         typeof flags.options === "string"
@@ -226,10 +275,12 @@ async function main(): Promise<void> {
     }
     default:
       console.error(
-        "usage: rrw <pull|status|comment|resolve|screenshot|done|ask|run|worker|doctor> [args]\n" +
+        "usage: rrw <pull|status|comment|resolve|screenshot|done|ask|run|worker|watch|doctor|init> [args]\n" +
           "       rrw run    [--mode session|worker] [--agent claude|codex] [--delivery in-place|pr] [--poll <ms>]\n" +
           "       rrw worker [--agent claude|codex] [--delivery in-place|pr] [--poll <ms>]   # force headless\n" +
-          "       rrw doctor   # 설정·브리지·토큰·(pr면)gh/git 점검",
+          "       rrw watch  [--once] [--poll <ms>]   # 세션 모드: 새 apply 요청 감지 시 알림\n" +
+          "       rrw doctor   # 설정·브리지·토큰·(pr면)gh/git 점검\n" +
+          "       rrw init [--out <path>] [--bridge-url <url>] [--author <name>]   # rrw.config.json 생성",
       );
       process.exit(1);
   }

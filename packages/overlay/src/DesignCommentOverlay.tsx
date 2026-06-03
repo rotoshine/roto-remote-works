@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { BridgeClient } from "./client";
-import type { ApplyOrigin, Comment, Question, Status } from "./types";
+import type { ApplyOrigin, Comment, CommentStatus, Question, Status } from "./types";
 import { capture, type Captured } from "./selector";
 import { submitComment } from "./submit";
 import { WebAskModal } from "./WebAskModal";
@@ -17,6 +17,13 @@ export interface DesignCommentOverlayProps {
 }
 
 const IDLE: Status = { state: "idle", currentStep: null, perComment: {}, result: null, updatedAt: "" };
+
+const STATUS_BADGE: Record<CommentStatus, string> = {
+  open: "●",
+  queued: "…",
+  applying: "⟳",
+  resolved: "✓",
+};
 
 type Draft = Captured & { px: number; py: number };
 
@@ -60,6 +67,11 @@ export function DesignCommentOverlay({
 
   const active = comments.filter((c) => c.status !== "resolved");
   const open = active.filter((c) => c.status === "open");
+  const resolved = comments.filter((c) => c.status === "resolved");
+  // open/in-progress first, resolved last
+  const ordered = [...comments].sort(
+    (a, b) => Number(a.status === "resolved") - Number(b.status === "resolved"),
+  );
   const running = status.state === "applying" || status.state === "queued";
 
   // comment-mode: hover-highlight the element under the cursor (inspector-style),
@@ -215,8 +227,11 @@ export function DesignCommentOverlay({
       {panelOpen && (
         <div className="rrw-card rrw-panel">
           <div className="rrw-panel-head">
-            <strong>코멘트 {active.length}개</strong>
-            {active.length > 0 && !running && (
+            <strong>
+              코멘트 · 열림 {open.length}
+              {resolved.length > 0 ? ` · 완료 ${resolved.length}` : ""}
+            </strong>
+            {comments.length > 0 && !running && (
               <button
                 className="rrw-btn rrw-btn-ghost"
                 type="button"
@@ -240,8 +255,11 @@ export function DesignCommentOverlay({
             </button>
           )}
           <ul className="rrw-panel-list">
-            {active.map((c) => (
-              <li key={c.id} className="rrw-panel-item">
+            {ordered.map((c) => (
+              <li key={c.id} className="rrw-panel-item" data-status={c.status} data-resolved={c.status === "resolved"}>
+                <span className="rrw-status" data-status={c.status} title={c.status}>
+                  {STATUS_BADGE[c.status]}
+                </span>
                 {c.author ? <strong className="rrw-panel-author">{c.author}: </strong> : null}
                 {c.comment}
               </li>

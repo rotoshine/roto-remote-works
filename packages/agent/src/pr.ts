@@ -25,6 +25,20 @@ interface CommentLike {
   url?: string;
 }
 
+/** Parse `git symbolic-ref --short refs/remotes/origin/HEAD` (e.g. "origin/main") → "main". */
+export function parseDefaultBranch(symbolicRefOutput: string): string | null {
+  const t = symbolicRefOutput.trim();
+  if (!t) return null;
+  const slash = t.lastIndexOf("/");
+  return slash >= 0 ? t.slice(slash + 1) : t;
+}
+
+/** Resolve the PR base: `auto` → the detected default branch (fallback "main"); else as configured. */
+export function resolveBase(configured: string, detected: string | null): string {
+  if (configured === "auto") return detected ?? "main";
+  return configured;
+}
+
 /** Deterministic, git-safe branch name from a request timestamp. */
 export function branchNameFor(requestedAt: string): string {
   const slug = requestedAt

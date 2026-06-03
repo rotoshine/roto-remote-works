@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loadConfig } from "./index";
+import { loadConfig, buildInitConfig } from "./index";
 
 function fakeFs(files: Record<string, string>) {
   return {
@@ -133,6 +133,31 @@ describe("loadConfig", () => {
   it("normalizes unknown delivery to in-place", () => {
     const fs = fakeFs({ "/proj/rrw.config.json": JSON.stringify({ processing: { delivery: "weird" } }) });
     expect(loadConfig({ cwd: "/proj", env: {}, fs }).processing.delivery).toBe("in-place");
+  });
+
+  it("buildInitConfig: defaults + distinct injected tokens", () => {
+    let n = 0;
+    const c = buildInitConfig({ genToken: () => `tok${++n}` });
+    expect(c.bridgeUrl).toBe("http://localhost:4317");
+    expect(c.token).toBe("tok1");
+    expect(c.clientToken).toBe("tok2");
+    expect(c.processing?.mode).toBe("session");
+    expect(c.processing?.delivery).toBe("in-place");
+    expect(c.bridge?.dataDir).toBe(".rrw/.rrw-data");
+  });
+
+  it("buildInitConfig: applies overrides", () => {
+    const c = buildInitConfig({
+      genToken: () => "x",
+      bridgeUrl: "http://b:1",
+      author: "Roto",
+      mode: "worker",
+      delivery: "pr",
+      base: "auto",
+    });
+    expect(c.bridgeUrl).toBe("http://b:1");
+    expect(c.author).toBe("Roto");
+    expect(c.processing).toMatchObject({ mode: "worker", delivery: "pr", base: "auto" });
   });
 
   it("clientToken defaults to null, reads from file, env overrides", () => {

@@ -50,6 +50,18 @@ describe("DesignCommentOverlay", () => {
     expect(answer).toHaveBeenCalledWith("q1", "blue");
   });
 
+  it("lists comments with status badges, including resolved ones", async () => {
+    const client = fakeClient({
+      listComments: async () => [comment("c1", "열림 코멘트", "open"), comment("c2", "완료된 코멘트", "resolved")],
+    });
+    render(<DesignCommentOverlay client={client} pollMs={10} />);
+    await userEvent.click(screen.getByRole("button", { name: /코멘트/ })); // open the panel
+    expect(await screen.findByText("열림 코멘트")).toBeInTheDocument();
+    expect(await screen.findByText("완료된 코멘트")).toBeInTheDocument();
+    expect(document.querySelector('[data-status="resolved"]')).toBeTruthy();
+    expect(document.querySelector('[data-status="open"]')).toBeTruthy();
+  });
+
   it("shows an inspector-style highlight over the hovered element while selecting", async () => {
     const target = document.createElement("div");
     target.textContent = "hover me";

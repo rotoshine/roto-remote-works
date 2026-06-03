@@ -34,6 +34,24 @@
     @apply font-bold text-primary underline;
   }
 
+  /* per-comment status badge in the panel list */
+  .rrw-status {
+    @apply mr-1 inline-block w-4 text-center font-bold;
+  }
+  .rrw-status[data-status="open"] {
+    @apply text-primary;
+  }
+  .rrw-status[data-status="queued"],
+  .rrw-status[data-status="applying"] {
+    @apply text-amber-500;
+  }
+  .rrw-status[data-status="resolved"] {
+    @apply text-emerald-500;
+  }
+  .rrw-panel-item[data-resolved="true"] {
+    @apply text-slate-400 line-through;
+  }
+
   /* inspector-style outline that tracks the hovered element while selecting */
   .rrw-highlight {
     @apply fixed z-[2147483100] rounded-sm border-2 border-primary;

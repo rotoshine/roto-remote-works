@@ -33,14 +33,17 @@ Claude가 수행하는 것: 도구 clone → 오버레이 빌드·**vendoring**(
 - **overlay** (`packages/overlay`, React+Vite+Tailwind) — 앱에 vendoring되어
   **Shadow DOM** 안에서 자체 스타일(파란 테마)로 렌더됩니다. React fiber로 소스
   `file:line`을 찾고, 코멘트마다 **뷰포트 스크린샷**을 캡처(lazy html2canvas)해
-  "여기 간격 이상" 같은 느슨한 시각 피드백도 에이전트가 *볼* 수 있게 합니다.
+  "여기 간격 이상" 같은 느슨한 시각 피드백도 에이전트가 *볼* 수 있게 합니다. 패널은
+  코멘트별 **상태 뱃지**(열림 ● / 진행 ⟳ / 완료 ✓)와 적용 결과·**PR 링크 배너**를
+  보여줘 비엔지니어도 진행/결과를 확인합니다.
 - **agent** (`packages/agent`) — `rrw` CLI + Claude 세션이 코멘트를 적용하고
   진행 상황을 보고하고 웹으로 질문하는 데 쓰는 `rrw-process` 스킬.
 
 ## 설정 — `rrw.config.json`
 
 **프로젝트 루트**의 파일 하나로 세 곳(bridge, `rrw` CLI, 오버레이 로더)을 모두
-설정합니다. `rrw.config.example.json`을 `rrw.config.json`으로 복사하세요:
+설정합니다. `rrw.config.example.json`을 복사하거나 **`./.rrw/rrw init`**(토큰
+자동 발급)으로 생성하세요:
 
 ```json
 {
@@ -149,6 +152,9 @@ rrw worker --agent codex  # 헤드리스 강제 (run --mode worker와 동일)
 
 - **로컬 인터랙티브** → `mode: "session"` 유지. 편집 중인 repo에 두 번째 헤드리스
   에이전트를 띄우지 마세요(stdin/권한/동시 편집 충돌).
+  - 세션을 깨우려면 **`./.rrw/rrw watch`**를 띄워두세요. 누군가 "수정 요청"을 누르면
+    `RRW-REQUEST <시각>` + 대기 코멘트를 출력합니다 — Monitor/watch로 이 출력을 보다가
+    세션에서 `rrw-process`를 돌리면 됩니다(`--once`는 첫 요청에서 종료).
 - **스탠드얼론/원격 브리지** → `mode: "worker"`, 코드 체크아웃이 있는 호스트에서
   `rrw run`(또는 `rrw worker`) 실행. `rrw ask`(web-ask)가 질문을 오버레이에 띄워
   터미널 없이도 동작합니다.
@@ -163,6 +169,9 @@ rrw worker --agent codex  # 헤드리스 강제 (run --mode worker와 동일)
 ```bash
 rrw run --mode worker --delivery pr     # PR로 적용 (base = processing.base, 기본 main)
 ```
+
+`processing.base`를 **`"auto"`**로 두면 워커가 repo 기본 브랜치를 감지해
+(`git symbolic-ref … origin/HEAD`) 사용합니다(감지 실패 시 `main`).
 
 `pr` delivery에서 워커는 요청마다: `git checkout <base> && git pull` → 에이전트
 실행 → 트리가 바뀌었으면 적용한 코멘트로 제목/본문을 구성해 PR을 엽니다(해당

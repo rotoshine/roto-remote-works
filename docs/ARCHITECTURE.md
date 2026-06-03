@@ -32,7 +32,7 @@ flowchart LR
 |---|---|---|
 | `packages/bridge` | Hono 서버 + 파일 상태 저장소(`Store`) + `rrw-bridge` CLI. 코멘트/apply요청/진행/질문의 단일 진실 공급원. | hono, @rrw/config |
 | `packages/overlay` | React+Vite+Tailwind 오버레이. 호스트 앱에 vendoring되어 Shadow DOM에 렌더. 요소 선택·코멘트·스크린샷 캡처. | react, html2canvas |
-| `packages/agent` | `rrw` CLI(pull/status/resolve/ask/run/worker) + 처리 로직(worker 루프, PR delivery). | @rrw/bridge(타입), @rrw/config |
+| `packages/agent` | `rrw` CLI(pull/status/resolve/ask/run/worker/watch/doctor/init) + 처리 로직(worker 루프, PR delivery, base 자동감지). | @rrw/bridge(타입), @rrw/config |
 | `packages/config` | `rrw.config.json` 로더(`loadConfig`). bridge·agent·overlay가 공유. | — |
 
 ## 데이터 흐름 (코멘트 → 적용)
