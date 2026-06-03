@@ -5,3 +5,4 @@ export * from "./worker";
 export * from "./runners";
 export * from "./pr";
 export * from "./apply";
+export * from "./doctor";

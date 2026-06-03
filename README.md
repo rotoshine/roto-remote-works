@@ -66,6 +66,19 @@ cd .rrw && pnpm install
 pnpm --filter @rrw/bridge start   # rrw.config.json을 읽음; URL + 토큰 출력
 ```
 
+### 점검 — `rrw doctor`
+
+설정이 맞는지, 브리지에 닿는지, 토큰이 맞는지(그리고 `delivery=pr`이면 `gh` 인증·git
+repo까지) 한 번에 확인합니다. "처리중에서 안 넘어가는데?" 같은 상황의 1차 진단용:
+
+```bash
+cd .rrw && ./rrw doctor
+# ✓ config: loaded …/rrw.config.json
+# ✓ token: 설정됨
+# ✓ bridge: http://localhost:4317 → 200
+# ✓ processing: mode=session agent=claude delivery=in-place base=main
+```
+
 ## 원격 (어디서든 코멘트) — Tailscale 런북
 
 브리지를 **공개적으로 노출하지 마세요.** **네트워크 게이팅**(여기서는 Tailscale)

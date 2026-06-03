@@ -7,6 +7,7 @@ import { runWorkerLoop } from "./worker";
 import { agentCommand, resolveRunner, type AgentKind, type RunMode } from "./runners";
 import { makeApply, type Delivery } from "./apply";
 import { openPullRequest, type CmdRunner } from "./pr";
+import { runDoctor } from "./doctor";
 import { loadConfig } from "@rrw/config";
 import type { CommentStatus, RunState } from "@rrw/bridge";
 
@@ -120,6 +121,22 @@ function parseFlags(args: string[]): { positionals: string[]; flags: Record<stri
 async function main(): Promise<void> {
   const [cmd, ...rest] = process.argv.slice(2);
   const { positionals, flags } = parseFlags(rest);
+
+  // `doctor` runs before the token gate so it can diagnose a missing token.
+  if (cmd === "doctor") {
+    const full = loadConfig();
+    const probeBridge = async () => {
+      const res = await fetch(`${full.bridgeUrl}/status`, {
+        headers: { authorization: `Bearer ${full.token}` },
+      });
+      return res.status;
+    };
+    const checks = await runDoctor({ config: full, probeBridge, run: cmdRunner });
+    for (const ch of checks) console.log(`${ch.ok ? "✓" : "✗"} ${ch.name}: ${ch.detail}`);
+    if (checks.some((ch) => !ch.ok)) process.exitCode = 1;
+    return;
+  }
+
   const cfg = config();
   const client = createAgentClient(cfg);
 
@@ -194,9 +211,10 @@ async function main(): Promise<void> {
     }
     default:
       console.error(
-        "usage: rrw <pull|status|comment|resolve|screenshot|done|ask|run|worker> [args]\n" +
-          "       rrw run    [--mode session|worker] [--agent claude|codex] [--poll <ms>]\n" +
-          "       rrw worker [--agent claude|codex] [--poll <ms>]   # force headless",
+        "usage: rrw <pull|status|comment|resolve|screenshot|done|ask|run|worker|doctor> [args]\n" +
+          "       rrw run    [--mode session|worker] [--agent claude|codex] [--delivery in-place|pr] [--poll <ms>]\n" +
+          "       rrw worker [--agent claude|codex] [--delivery in-place|pr] [--poll <ms>]   # force headless\n" +
+          "       rrw doctor   # 설정·브리지·토큰·(pr면)gh/git 점검",
       );
       process.exit(1);
   }
