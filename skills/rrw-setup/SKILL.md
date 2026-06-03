@@ -10,7 +10,7 @@ Target = **React** apps (Next.js or Vite + React). Do the steps in order.
 ## 1. Clone the tool
 If `.rrw/` is missing, clone the repo there (or download a GitHub release):
 ```bash
-gh repo clone rotoshine/roto-remote-works .rrw   # gh handles auth for the private repo
+git clone https://github.com/rotoshine/roto-remote-works .rrw   # public repo, no auth needed
 (cd .rrw && pnpm install && pnpm --filter @rrw/overlay build)   # → .rrw/packages/overlay/dist/overlay.js
 ```
 Add `.rrw/` to the project `.gitignore`.

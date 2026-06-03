@@ -12,7 +12,7 @@
 
 ```
 이 프로젝트에 roto-remote-works 디자인 코멘트 도구를 설치해줘.
-`gh repo clone rotoshine/roto-remote-works .rrw` 로 받은 뒤(비공개 repo),
+`git clone https://github.com/rotoshine/roto-remote-works .rrw` 로 받은 뒤,
 clone 안의 skills/rrw-setup/SKILL.md 절차를 따라 설치하고,
 이 프로젝트의 스택(React/Next/Vite/Tailwind 등)을 분석해 필요한 React 스킬을 설치해줘.
 ```
