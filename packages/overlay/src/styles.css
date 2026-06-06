@@ -88,6 +88,17 @@
   .rrw-draft-meta {
     @apply text-xs text-slate-500;
   }
+  .rrw-draft-handle {
+    @apply flex items-center gap-1 -m-1 rounded p-1;
+    cursor: move;
+    user-select: none;
+  }
+  .rrw-draft-handle:hover {
+    @apply bg-slate-100;
+  }
+  .rrw-draft-grip {
+    @apply text-slate-400;
+  }
 
   .rrw-dock {
     @apply fixed bottom-16 right-4 w-72;

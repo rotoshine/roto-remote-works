@@ -1,7 +1,9 @@
+import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import type { BridgeClient } from "./client";
 import type { ApplyOrigin, Comment, CommentStatus, Question, Status } from "./types";
 import { capture, type Captured } from "./selector";
+import { clampToViewport, type Point } from "./position";
 import { submitComment } from "./submit";
 import { WebAskModal } from "./WebAskModal";
 import { ProgressPanel } from "./ProgressPanel";
@@ -27,6 +29,10 @@ const STATUS_BADGE: Record<CommentStatus, string> = {
 
 type Draft = Captured & { px: number; py: number };
 
+// approx draft-card size, used to keep it (and its buttons) on-screen
+const DRAFT_SIZE = { w: 288, h: 200 };
+const viewport = () => ({ w: window.innerWidth, h: window.innerHeight });
+
 export function DesignCommentOverlay({
   client,
   pollMs = 1500,
@@ -41,6 +47,7 @@ export function DesignCommentOverlay({
   const [panelOpen, setPanelOpen] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [draftText, setDraftText] = useState("");
+  const [draftPos, setDraftPos] = useState<Point | null>(null);
   const [hover, setHover] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [dismissedResultAt, setDismissedResultAt] = useState<string | null>(null);
 
@@ -99,6 +106,8 @@ export function DesignCommentOverlay({
       if (!el || isUi(el)) return;
       setDraft({ ...capture(el), px: e.clientX, py: e.clientY });
       setDraftText("");
+      // place the draft near the click but clamped fully on-screen
+      setDraftPos(clampToViewport({ left: e.clientX, top: e.clientY + 12 }, DRAFT_SIZE, viewport()));
       setHover(null);
       setMode("off");
     };
@@ -122,9 +131,36 @@ export function DesignCommentOverlay({
     if (!draft || !draftText.trim()) return;
     await submitComment(client, draft, draftText.trim(), captureScreenshot, author);
     setDraft(null);
+    setDraftPos(null);
     setDraftText("");
     void poll();
   }, [client, draft, draftText, captureScreenshot, author, poll]);
+
+  // drag the draft card by its header so it never gets stuck off-screen
+  const startDraftDrag = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const base = draftPos ?? { left: e.clientX, top: e.clientY };
+      const onMove = (ev: MouseEvent) => {
+        setDraftPos(
+          clampToViewport(
+            { left: base.left + (ev.clientX - startX), top: base.top + (ev.clientY - startY) },
+            DRAFT_SIZE,
+            viewport(),
+          ),
+        );
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [draftPos],
+  );
 
   const requestApply = useCallback(async () => {
     try {
@@ -196,8 +232,12 @@ export function DesignCommentOverlay({
       )}
 
       {draft && (
-        <div className="rrw-card rrw-draft" style={{ left: draft.px, top: draft.py + 12 }}>
-          <div className="rrw-draft-meta">
+        <div
+          className="rrw-card rrw-draft"
+          style={{ left: (draftPos ?? { left: draft.px, top: draft.py + 12 }).left, top: (draftPos ?? { left: draft.px, top: draft.py + 12 }).top }}
+        >
+          <div className="rrw-draft-meta rrw-draft-handle" onMouseDown={startDraftDrag} title="드래그해서 이동">
+            <span className="rrw-draft-grip">⠿</span>
             {draft.tag}
             {draft.component ? ` · <${draft.component}>` : ""}
           </div>
@@ -209,7 +249,14 @@ export function DesignCommentOverlay({
             rows={3}
           />
           <div className="rrw-row">
-            <button className="rrw-btn rrw-btn-ghost" type="button" onClick={() => setDraft(null)}>
+            <button
+              className="rrw-btn rrw-btn-ghost"
+              type="button"
+              onClick={() => {
+                setDraft(null);
+                setDraftPos(null);
+              }}
+            >
               취소
             </button>
             <button

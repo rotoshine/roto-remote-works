@@ -50,6 +50,50 @@ describe("DesignCommentOverlay", () => {
     expect(answer).toHaveBeenCalledWith("q1", "blue");
   });
 
+  it("places the comment draft on-screen even when clicking near the bottom-right edge", async () => {
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = () => target;
+    try {
+      render(<DesignCommentOverlay client={fakeClient()} />);
+      await userEvent.click(screen.getByRole("button", { name: /코멘트/ })); // selecting mode
+      fireEvent.click(target, { clientX: 1020, clientY: 760 }); // jsdom viewport 1024x768
+      const card = document.querySelector(".rrw-draft") as HTMLElement | null;
+      expect(card).not.toBeNull();
+      const left = parseInt(card!.style.left, 10);
+      const top = parseInt(card!.style.top, 10);
+      expect(left).toBeLessThanOrEqual(1024 - 288 - 12); // 724
+      expect(left).toBeGreaterThanOrEqual(12);
+      expect(top).toBeLessThanOrEqual(768 - 200 - 12); // 556
+    } finally {
+      document.elementFromPoint = orig;
+      target.remove();
+    }
+  });
+
+  it("lets the draft card be dragged by its handle", async () => {
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = () => target;
+    try {
+      render(<DesignCommentOverlay client={fakeClient()} />);
+      await userEvent.click(screen.getByRole("button", { name: /코멘트/ }));
+      fireEvent.click(target, { clientX: 300, clientY: 300 });
+      const card = () => document.querySelector(".rrw-draft") as HTMLElement;
+      const before = card().style.left;
+      const handle = document.querySelector(".rrw-draft-handle") as HTMLElement;
+      fireEvent.mouseDown(handle, { clientX: 300, clientY: 300 });
+      fireEvent.mouseMove(document, { clientX: 200, clientY: 300 }); // drag left 100px
+      fireEvent.mouseUp(document);
+      expect(card().style.left).not.toBe(before);
+    } finally {
+      document.elementFromPoint = orig;
+      target.remove();
+    }
+  });
+
   it("lists comments with status badges, including resolved ones", async () => {
     const client = fakeClient({
       listComments: async () => [comment("c1", "열림 코멘트", "open"), comment("c2", "완료된 코멘트", "resolved")],
