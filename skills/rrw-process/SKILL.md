@@ -44,7 +44,7 @@ truth; you talk to it through the `rrw` CLI (provided by setup — see the proje
      ```bash
      rrw screenshot <id> /tmp/rrw-<id>.png   # then open / Read the PNG
      ```
-   - Locate the code: prefer `source` (`file:line:col`, from the React fiber);
+   - Locate the code: prefer `source` (`file:line`, from react-grab/React fiber);
      otherwise use `selector` + `classes` + `text` to find the JSX.
    - Make the edit. **Follow the installed React skills** (e.g.
      `vercel-react-best-practices`, `vercel-react-view-transitions`) for quality.
