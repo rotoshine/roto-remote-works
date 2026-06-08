@@ -10,12 +10,14 @@
 ```bash
 # 세팅 요약
 pnpm create vite test-app --template react-ts   # React 19 기본
-# overlay 빌드 산출물 복사
-cp packages/overlay/dist/overlay.js test-app/src/rrw/overlay.js
-cp packages/overlay/dist/rrw-loader.js test-app/src/rrw-loader.js
-cp packages/overlay/dist/useRrwOverlay.js test-app/src/useRrwOverlay.js
+# overlay 빌드 산출물 + 로더 소스 복사 (rrw-setup과 동일: 번들은 dist, 로더는 src)
+mkdir -p test-app/src/rrw
+cp packages/overlay/dist/overlay.js          test-app/src/rrw/overlay.js
+cp packages/overlay/src/rrw-loader.ts        test-app/src/rrw/rrw-loader.ts
+cp packages/overlay/src/useRrwOverlay.ts     test-app/src/rrw/useRrwOverlay.ts
+sed -i '' 's#import("./index")#import("./overlay.js")#' test-app/src/rrw/rrw-loader.ts
 # App.tsx에서:
-#   import { useRrwOverlay } from './useRrwOverlay'
+#   import { useRrwOverlay } from './rrw/useRrwOverlay'
 #   useRrwOverlay(true, { bridgeUrl: 'http://localhost:4317', token: '<clientToken>' })
 # 브리지: pnpm --filter @rrw/bridge start
 ```
