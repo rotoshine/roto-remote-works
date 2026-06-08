@@ -45,8 +45,16 @@ export function isRrwRunning(): boolean {
   return !!unmount;
 }
 
+// Expose the imperative controller, but only ONCE per page. When the overlay is
+// vendored, the host statically imports this file (the vendored loader) AND it is
+// re-exported from index.ts → so it also rides inside the lazily-imported
+// overlay.js. Both module instances run this side-effect with SEPARATE unmount
+// state. The vendored loader loads first and owns the real `unmount`; using `??=`
+// keeps it on window so `window.__rrw.stop()` tears down the running overlay instead
+// of hitting the bundle's empty-handle copy (a no-op).
 if (typeof window !== "undefined") {
-  (window as unknown as { __rrw?: unknown }).__rrw = {
+  const w = window as unknown as { __rrw?: unknown };
+  w.__rrw ??= {
     start: startRrw,
     stop: stopRrw,
     isRunning: isRrwRunning,

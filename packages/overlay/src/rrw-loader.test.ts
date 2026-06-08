@@ -33,6 +33,19 @@ it("exposes window.__rrw", () => {
   expect(typeof w.__rrw?.isRunning).toBe("function");
 });
 
+it("does NOT overwrite an existing window.__rrw (vendored loader vs bundled copy)", async () => {
+  // The vendored loader owns the real unmount handle and is on window first; when
+  // overlay.js later evaluates its own copy of this module it must NOT clobber it,
+  // or window.__rrw.stop() would hit an empty-handle no-op. Re-evaluate the module
+  // with a controller already present and assert it is left untouched.
+  const w = window as unknown as { __rrw?: unknown };
+  const existing = { start: vi.fn(), stop: vi.fn(), isRunning: vi.fn() };
+  w.__rrw = existing;
+  vi.resetModules();
+  await import("./rrw-loader");
+  expect(w.__rrw).toBe(existing);
+});
+
 it("stop during load unmounts the overlay once it finishes loading", async () => {
   // The vi.mock above provides a synchronous module, but `import("./index")` itself
   // is always at least a microtask away. By calling startRrw (no await) and then

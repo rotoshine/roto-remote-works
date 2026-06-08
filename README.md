@@ -84,7 +84,7 @@ Claude가 수행하는 것: 도구 clone → 오버레이 빌드·**vendoring**(
 ### React 훅 (권장)
 
 ```tsx
-import { useRrwOverlay } from './rrw-loader' // rrw-setup이 vendoring
+import { useRrwOverlay } from './useRrwOverlay' // rrw-setup이 vendoring (rrw-loader.ts와 함께)
 
 function App() {
   const isDesigner = useAuth().role === 'designer'
