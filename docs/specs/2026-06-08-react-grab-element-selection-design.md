@@ -101,9 +101,13 @@ export async function loadGrabEngine(): Promise<GrabEngine> { /* real adapter, b
      overlay. Tradeoff: host page may shift slightly during selection (accepted).
    - `getGlobalApi()` first — singleton-aware; never assume we own the only instance.
 3. `api.registerPlugin({ name, theme, hooks })` — hooks attach to a **Plugin**, not
-   `init()` (Options has no `hooks`/`theme`). `theme: { toolbar:{enabled:false},
-   grabbedBoxes:{enabled:false} }` suppresses react-grab's own chrome so only our
-   highlight + draft card render.
+   `init()` (Options has no `hooks`/`theme`). `theme` disables **all** react-grab
+   chrome (`toolbar`, `selectionBox`, `dragBox`, `grabbedBoxes`, `elementLabel` all
+   `enabled:false`) so react-grab renders **zero** light-DOM UI and needs no
+   `styles.css`. We use it purely as a selection/stack-nav/`getSource` engine; **our**
+   Shadow-DOM highlight + draft card stay as the only UI. (Re-enabling
+   `selectionBox`/`elementLabel` for a native floating component-label is a
+   smoke-test-verified follow-up — Task 8 — not the baseline.)
 4. `hooks.onElementSelect = async (el) => { const s = await api.getSource(el);
    emit({ element: el, source: s?.filePath ? (s.lineNumber!=null ?
    ` + "`${s.filePath}:${s.lineNumber}`" + ` : s.filePath) : null, component:
@@ -113,14 +117,18 @@ export async function loadGrabEngine(): Promise<GrabEngine> { /* real adapter, b
 5. `dispose()` → `unregisterPlugin(name)` + `api.dispose()` (no auto-cleanup on React
    unmount).
 
-**Overlay wiring (`DesignCommentOverlay.tsx`):** the engine **replaces** the manual
-`mousemove`/`click`/`elementFromPoint` inspector in the `mode==="selecting"`
-effect (~lines 86–128). On first entering selecting mode, `await loadGrabEngine()`
-once (memoize the promise in a ref), `engine.onGrab` → run existing `capture(el)`
-for `selector/rect/text/classes/tag` then **override** `source`/`component` with the
+**Overlay wiring (`DesignCommentOverlay.tsx`):** in the `mode==="selecting"` effect
+(~lines 86–128) we **keep** the `mousemove` hover highlight and the Esc handler, and
+**replace only the click→capture** path with the engine: on first entering selecting
+mode, `await loadGrabEngine()` once (memoize the promise in a ref), guard against
+unmount-during-load (a `disposed` flag before subscribing), `engine.onGrab` → ignore
+elements inside `[data-rrw-host]`, run existing `capture(el)` for
+`selector/rect/text/classes/tag` then **override** `source`/`component` with the
 grab's values, open the draft card (reuse `clampToViewport` placement), then
 `engine.activate()`. On Esc/exit → `deactivate()`. On unmount → `dispose()`.
 `inspectFiber` stays as the fallback inside `capture` when the grab's source is null.
+Keeping our own highlight means each commit always has selection-time visual feedback
+regardless of react-grab's (suppressed) chrome.
 
 ## 5. Runtime-gated loader (B) — host-owned activation
 
@@ -128,39 +136,43 @@ A thin always-present module (vendored into the host, no static import of
 `overlay.js`) with a single lazy-load-once controller shared by both entry points:
 
 ```ts
-// components/rrw/rrw-loader.ts  (vendored; tiny — only this is in the host bundle)
+// rrw-loader.ts (vendored; tiny — only this + the hook are in the host bundle)
+// Inlines its config type so it resolves where only overlay.js is copied. `token` is
+// the BROWSER bearer = the LOW-trust clientToken; the high-trust token is server-only
+// (RRW_TOKEN env) and must NEVER be bundled (no `?? cfg.token` fallback).
+export interface RrwLoaderConfig { bridgeUrl?: string; token?: string; author?: string; pollMs?: number }
+
 let unmount: (() => void) | undefined;
 let starting: Promise<void> | undefined;
 
-export async function startRrw(): Promise<void> {
-  if (unmount || starting) return starting;        // idempotent
-  starting = import("./overlay.js").then((m) => {
-    unmount = m.mountOverlay({
-      bridgeUrl: cfg.bridgeUrl ?? "http://localhost:4317",
-      token: cfg.clientToken ?? cfg.token ?? "",
-      author: cfg.author,
-    });
-  }).finally(() => { starting = undefined; });
+export async function startRrw(config: RrwLoaderConfig = {}): Promise<void> {
+  if (unmount) return;
+  if (starting) return starting;                   // idempotent
+  starting = import("./index") // rrw-setup rewrites to import("./overlay.js") when vendoring
+    .then((m: { mountOverlay: (c: RrwLoaderConfig) => () => void }) => { unmount = m.mountOverlay(config); })
+    .finally(() => { starting = undefined; });
   return starting;
 }
 export function stopRrw(): void { unmount?.(); unmount = undefined; }
 export function isRrwRunning(): boolean { return !!unmount; }
 
 if (typeof window !== "undefined") {
-  (window as Window & { __rrw?: unknown }).__rrw = { start: startRrw, stop: stopRrw, isRunning: isRrwRunning };
+  (window as unknown as { __rrw?: unknown }).__rrw = { start: startRrw, stop: stopRrw, isRunning: isRrwRunning };
 }
 ```
 
-React hook (declarative; host computes `enabled` from its own userId/role/flag):
+React hook (declarative; host computes `enabled` from its own userId/role/flag; `config`
+must be a stable reference):
 
 ```ts
-// components/rrw/useRrwOverlay.ts
-export function useRrwOverlay(enabled: boolean): void {
+// useRrwOverlay.ts
+export function useRrwOverlay(enabled: boolean, config: RrwLoaderConfig = {}): void {
   useEffect(() => {
     if (!enabled) return;
-    void startRrw();
+    void startRrw(config);
     return () => stopRrw();
-  }, [enabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]); // re-runs only on enabled change; to change config, stopRrw() then re-enable
 }
 ```
 
