@@ -33,6 +33,7 @@ cp .rrw/packages/overlay/dist/overlay.js components/rrw/overlay.js
 cp .rrw/packages/overlay/src/rrw-loader.ts components/rrw/rrw-loader.ts
 cp .rrw/packages/overlay/src/useRrwOverlay.ts components/rrw/useRrwOverlay.ts
 # vendored 로더가 TS 소스가 아닌 빌드 번들을 가리키도록 경로를 교정한다:
+# (macOS/BSD sed 기준. Linux/GNU sed는 빈 인자 없이: sed -i 's#...#...#' ... )
 sed -i '' 's#import("./index")#import("./overlay.js")#' components/rrw/rrw-loader.ts
 ```
 로더(`rrw-loader.ts`)는 `RrwLoaderConfig` 타입을 인라인으로 정의하므로 다른 소스 파일은
@@ -65,7 +66,7 @@ export function RrwGate() {
 `<RrwGate />`를 조건 없이 렌더링한다 (Next `app/layout.tsx` `<body>`, 또는 Vite 루트).
 
 **Imperative / vConsole:**
-`window.__rrw.start({ bridgeUrl, token: clientToken })` 로 시작하고,
+`window.__rrw.start({ bridgeUrl, token: cfg.clientToken })` 로 시작하고 (브라우저는 저신뢰 clientToken만),
 `window.__rrw.stop()` 으로 제거한다.
 
 > ⚠️ **게이트는 UX 편의용이지 보안 경계가 아니다.** URL 파라미터·localStorage·devtools로
