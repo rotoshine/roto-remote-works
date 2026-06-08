@@ -67,14 +67,24 @@ export async function loadGrabEngine(): Promise<GrabEngine> {
     },
   });
 
+  let disposed = false;
+
   return {
-    activate: () => api.activate(),
-    deactivate: () => api.deactivate(),
+    activate: () => {
+      if (disposed) return;
+      api.activate();
+    },
+    deactivate: () => {
+      if (disposed) return;
+      api.deactivate();
+    },
     onGrab: (cb) => {
       subscribers.add(cb);
       return () => subscribers.delete(cb);
     },
     dispose: () => {
+      if (disposed) return;
+      disposed = true;
       subscribers.clear();
       api.unregisterPlugin(PLUGIN_NAME);
       api.dispose();

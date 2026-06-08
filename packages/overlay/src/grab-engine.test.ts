@@ -123,3 +123,24 @@ it("re-inits after dispose when no global instance survives", async () => {
   await loadGrabEngine();
   expect(initFn).toHaveBeenCalledTimes(2);
 });
+
+it("activate/deactivate/dispose are no-ops after dispose()", async () => {
+  const engine = await loadGrabEngine();
+  engine.dispose();
+
+  // Reset call counts after dispose so we only observe post-dispose calls
+  activate.mockClear();
+  deactivate.mockClear();
+  dispose.mockClear();
+
+  // These must NOT forward to the api
+  engine.activate();
+  engine.deactivate();
+
+  expect(activate).not.toHaveBeenCalled();
+  expect(deactivate).not.toHaveBeenCalled();
+
+  // A second dispose must not call api.dispose() again
+  engine.dispose();
+  expect(dispose).not.toHaveBeenCalled();
+});
