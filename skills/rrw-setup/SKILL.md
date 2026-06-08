@@ -1,6 +1,6 @@
 ---
 name: rrw-setup
-description: Install the roto-remote-works design-comment tool into a React project. Use when the user pastes the setup prompt or asks to set up / install roto-remote-works (the design-comment overlay) in their app. Clones the tool, vendors the overlay, wires it dev-gated, analyzes the stack, and installs matching React skills.
+description: Install the roto-remote-works design-comment tool into a React project. Use when the user pastes the setup prompt or asks to set up / install roto-remote-works (the design-comment overlay) in their app. Clones the tool, vendors the overlay, wires it with host-owned runtime gating, analyzes the stack, and installs matching React skills.
 ---
 
 # rrw-setup — install into a React project
@@ -26,41 +26,54 @@ Read the project `package.json`:
 - Note Tailwind / vanilla-extract / shadcn — **irrelevant to the overlay** (it ships its own styles), but informs which React skills to install.
 
 ## 3. Vendor the overlay (prebuilt, self-contained)
-Copy the built artifact into the app and add a dev-only loader:
+빌드 산출물과 런타임 로더 소스를 앱 안으로 복사한다:
 ```bash
-mkdir -p components/rrw && cp .rrw/packages/overlay/dist/overlay.js components/rrw/overlay.js
+mkdir -p components/rrw
+cp .rrw/packages/overlay/dist/overlay.js components/rrw/overlay.js
+cp .rrw/packages/overlay/src/rrw-loader.ts components/rrw/rrw-loader.ts
+cp .rrw/packages/overlay/src/useRrwOverlay.ts components/rrw/useRrwOverlay.ts
+# vendored 로더가 TS 소스가 아닌 빌드 번들을 가리키도록 경로를 교정한다:
+sed -i '' 's#import("./index")#import("./overlay.js")#' components/rrw/rrw-loader.ts
 ```
-Create `components/rrw/RrwOverlay.tsx` (reads the shared `rrw.config.json` — see step 5):
+로더(`rrw-loader.ts`)는 `RrwLoaderConfig` 타입을 인라인으로 정의하므로 다른 소스 파일은
+필요 없다. `overlay.js`에는 호스트 쪽 타입 정의가 없어 `mountOverlay`가 untyped로 남는데,
+vendored 로더가 그 호출을 감싸므로 호스트에서 직접 접근할 일은 없다 — 허용 가능.
+
+## 4. Wire it — host-owned runtime gating (works in production)
+오버레이는 빌드 타임에 막지 않는다. **호스트가 활성화 조건을 직접 결정**하며, 조건이
+충족될 때만 번들이 lazy-fetch된다 (일반 사용자는 0 바이트를 받는다). 두 가지 방법:
+
+**React hook (권장):**
 ```tsx
 "use client";
-import { useEffect } from "react";
+import { useRrwOverlay } from "@/components/rrw/useRrwOverlay";
 import rrwConfig from "@/rrw.config.json";
-// The browser only needs the LOW-trust token. The whole JSON is bundled, so in
-// two-token mode keep the high-trust `token` OUT of this file (set RRW_TOKEN env
-// on the bridge/agent hosts) — see step 5.
-const cfg = rrwConfig as { bridgeUrl?: string; clientToken?: string; token?: string; author?: string };
-export function RrwOverlay() {
-  useEffect(() => {
-    if (process.env.NODE_ENV === "production") return;
-    let unmount: (() => void) | undefined;
-    import("./overlay.js").then((m) => {
-      unmount = m.mountOverlay({
-        bridgeUrl: cfg.bridgeUrl ?? "http://localhost:4317",
-        token: cfg.clientToken ?? cfg.token ?? "",
-        author: cfg.author,
-      });
-    });
-    return () => unmount?.();
-  }, []);
+// 브라우저는 LOW-trust clientToken 만 사용한다. 고신뢰 `token` 은 서버 전용
+// (브리지·에이전트 호스트의 RRW_TOKEN env)이며 여기에 참조하면 안 된다.
+// 런타임 게이팅 prod 빌드에서는 config 전체가 번들에 포함되므로,
+// `?? cfg.token` 폴백을 쓰면 고신뢰 토큰이 모든 브라우저로 유출된다.
+const cfg = rrwConfig as { bridgeUrl?: string; clientToken?: string; author?: string };
+
+export function RrwGate() {
+  // 아래 조건을 프로젝트 상황에 맞게 교체한다 (역할, userId allowlist, 피처 플래그, 쿼리스트링 등).
+  const enabled =
+    typeof window !== "undefined" && new URLSearchParams(location.search).get("rrw") === "1";
+  useRrwOverlay(enabled, { bridgeUrl: cfg.bridgeUrl, token: cfg.clientToken ?? "", author: cfg.author });
   return null;
 }
 ```
-(Vite: gate with `import.meta.env.DEV`; the JSON import is the same.)
+`<RrwGate />`를 조건 없이 렌더링한다 (Next `app/layout.tsx` `<body>`, 또는 Vite 루트).
 
-## 4. Wire it dev-gated
-- **Next**: in `app/layout.tsx` `<body>`, render
-  `{process.env.NODE_ENV !== "production" && <RrwOverlay />}`.
-- **Vite**: in `src/main.tsx`, `if (import.meta.env.DEV) import("./components/rrw/RrwOverlay")…`.
+**Imperative / vConsole:**
+`window.__rrw.start({ bridgeUrl, token: clientToken })` 로 시작하고,
+`window.__rrw.stop()` 으로 제거한다.
+
+> ⚠️ **게이트는 UX 편의용이지 보안 경계가 아니다.** URL 파라미터·localStorage·devtools로
+> 플래그를 바꾸면 누구든 lazy 번들을 받아 `clientToken`을 읽을 수 있다 — 이는 저신뢰 토큰이며
+> 브라우저에 노출되도록 설계된 것이다. 실제 보안 경계는 브리지의 **네트워크 게이팅**
+> (Tailscale/Cloudflare Access)과 **운영자 승인 `apply`** 이다. 오버레이 로딩 자체가 코드
+> 편집을 트리거하지는 않는다. 2-토큰 prod 빌드에서는 `rrw.config.json`에 `bridgeUrl` +
+> `clientToken` 만 남겨라.
 
 ## 5. Config — `rrw.config.json` (one file, read by all three sides)
 Create `rrw.config.json` at the **project root**. The bridge, the `rrw` CLI, and
