@@ -10,25 +10,33 @@ export interface RrwLoaderConfig {
 }
 
 let unmount: (() => void) | undefined;
-let starting: Promise<void> | undefined;
+let starting = false;
+let wantRunning = false;
 
 /** Lazy-load and mount the overlay. Idempotent; callable from a host effect, a
  *  console, or vConsole. The dynamic import keeps the heavy chunk out of every
  *  normal user's bundle. */
 export async function startRrw(config: RrwLoaderConfig = {}): Promise<void> {
-  if (unmount) return;
-  if (starting) return starting;
-  starting = import("./index")
-    .then((m: { mountOverlay: (c: RrwLoaderConfig) => () => void }) => {
-      unmount = m.mountOverlay(config);
-    })
-    .finally(() => {
-      starting = undefined;
-    });
-  return starting;
+  wantRunning = true;
+  if (unmount || starting) return;
+  starting = true;
+  try {
+    const m = (await import("./index")) as { mountOverlay: (c: RrwLoaderConfig) => () => void };
+    const u = m.mountOverlay(config);
+    if (wantRunning) {
+      unmount = u;
+    } else {
+      // stopRrw() was called while the import was in-flight — tear down immediately
+      // so no overlay is left stranded with no unmount handle.
+      u();
+    }
+  } finally {
+    starting = false;
+  }
 }
 
 export function stopRrw(): void {
+  wantRunning = false;
   unmount?.();
   unmount = undefined;
 }
