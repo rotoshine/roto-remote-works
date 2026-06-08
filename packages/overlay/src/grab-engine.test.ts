@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { it, expect, vi, beforeEach } from "vitest";
 
 const initFn = vi.fn();
 const getGlobalApiFn = vi.fn<() => unknown>(() => null);
@@ -61,20 +61,52 @@ it("onElementSelect emits a Grab (source from getSource) and returns false", asy
   expect(grabs).toEqual([{ element: el, source: "src/Button.tsx:12", component: "Button" }]);
 });
 
+// Fix #2: replace unsafe optional-chained call with guarded extraction
 it("falls back to null source when getSource rejects", async () => {
   getSource.mockRejectedValue(new Error("no source maps"));
   const engine = await loadGrabEngine();
   const grabs: Array<{ source: string | null; component: string | null }> = [];
   engine.onGrab((g) => grabs.push(g));
-  await registerPlugin.mock.calls[0]?.[0].hooks.onElementSelect(document.createElement("div"));
+  const plugin = registerPlugin.mock.calls[0]?.[0];
+  expect(plugin).toBeDefined();
+  await plugin.hooks.onElementSelect(document.createElement("div"));
   expect(grabs[0]).toEqual({ element: expect.any(Element), source: null, component: null });
 });
 
-it("dispose unregisters the plugin and disposes the api", async () => {
+// Fix #3: verify dispose() actually clears subscribers so the onGrab spy is NOT called after dispose
+it("dispose unregisters the plugin, disposes the api, and clears subscribers", async () => {
   const engine = await loadGrabEngine();
+
+  // Capture plugin reference BEFORE dispose
+  const plugin = registerPlugin.mock.calls[0]?.[0];
+  expect(plugin).toBeDefined();
+
+  const grabSpy = vi.fn();
+  engine.onGrab(grabSpy);
+
   engine.dispose();
+
   expect(unregisterPlugin).toHaveBeenCalledWith("roto-remote-works");
   expect(dispose).toHaveBeenCalled();
+
+  // Drive onElementSelect via the captured plugin ref after dispose.
+  // subscribers.clear() must have been called — if it were removed the spy WOULD fire.
+  getSource.mockResolvedValue({ filePath: "src/Foo.tsx", lineNumber: 1, componentName: "Foo" });
+  await plugin.hooks.onElementSelect(document.createElement("div"));
+  expect(grabSpy).not.toHaveBeenCalled();
+});
+
+// Fix #4: assert activate() / deactivate() delegate to the api mocks
+it("activate() calls the api activate mock", async () => {
+  const engine = await loadGrabEngine();
+  engine.activate();
+  expect(activate).toHaveBeenCalledTimes(1);
+});
+
+it("deactivate() calls the api deactivate mock", async () => {
+  const engine = await loadGrabEngine();
+  engine.deactivate();
+  expect(deactivate).toHaveBeenCalledTimes(1);
 });
 
 it("reuses an existing global instance instead of re-initing", async () => {
