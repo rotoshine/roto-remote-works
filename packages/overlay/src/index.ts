@@ -1,4 +1,6 @@
 export { mountOverlay, type MountConfig } from "./mount";
+export { startRrw, stopRrw, isRrwRunning, type RrwLoaderConfig } from "./rrw-loader";
+export { useRrwOverlay } from "./useRrwOverlay";
 export { DesignCommentOverlay, type DesignCommentOverlayProps } from "./DesignCommentOverlay";
 export { WebAskModal, type WebAskModalProps } from "./WebAskModal";
 export { ProgressPanel, type ProgressPanelProps } from "./ProgressPanel";
