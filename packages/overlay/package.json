@@ -8,7 +8,8 @@
     "react-dom": ">=18"
   },
   "dependencies": {
-    "html2canvas": "^1.4.1"
+    "html2canvas": "^1.4.1",
+    "react-grab": "^0.1.44"
   },
   "scripts": {
     "build": "vite build",
