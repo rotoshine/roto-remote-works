@@ -19,8 +19,8 @@ describe.runIf(RUN)("overlay build artifact", () => {
   it("bundles react-grab but not the Node @react-grab/cli", () => {
     const code = readFileSync(resolve(dist, "overlay.js"), "utf8");
     expect(code).toMatch(/react-grab/); // positive: react-grab IS bundled, not externalized
-    expect(code).not.toMatch(/from\s*['"]@react-grab\/cli/);
-    expect(code).not.toMatch(/require\(\s*['"]@react-grab\/cli/);
+    // any stringified reference to the Node CLI (static/dynamic import, require, bare) must be absent
+    expect(code).not.toMatch(/['"]@react-grab\/cli['"]/);
     expect(code).not.toMatch(/['"]node:child_process['"]/);
   });
 });
