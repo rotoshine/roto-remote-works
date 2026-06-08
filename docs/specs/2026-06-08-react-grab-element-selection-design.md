@@ -1,177 +1,273 @@
-# roto-remote-works — react-grab as the Element-Selection Engine (Phase 1)
+# roto-remote-works — react-grab Selection Engine + Runtime-Gated Loader + React 19 Rule
 
 Spec date: 2026-06-08
+Status: design approved; grounded against react-grab@0.1.44 installed source (spike `wf_bc209933-aad`).
 
 ## 1. Purpose
 
-Improve the overlay's **element-selection UX** by delegating the selection phase
-to [`react-grab`](https://github.com/aidenybai/react-grab) (MIT). Today the
-overlay does hover-highlight + single-click capture and resolves source via a
-hand-rolled React-fiber walk (`packages/overlay/src/selector.ts` →
-`inspectFiber`, reading `_debugSource`). On **React 19** (`@types/react ^19`)
-`_debugSource` is removed, so source resolution is degraded, and the user can
-only grab the deepest leaf DOM node (e.g. a `<span>` inside a button), never the
-meaningful component.
+Three cohesive changes to how the overlay is selected-with and loaded:
 
-react-grab provides, at runtime with **no consumer build plugin**: hover
-highlight, component-name labels, component-stack navigation (pick the parent
-component instead of the leaf), and more accurate source resolution. This spec
-adopts it as the **selection engine** while keeping our comment/screenshot/bridge
-flow unchanged.
+- **(A) react-grab selection engine** — delegate the element-**selection** UX to
+  [`react-grab`](https://github.com/aidenybai/react-grab)@0.1.44 (MIT): hover
+  highlight, component-name labels, component-stack (↑↓) navigation, and
+  **React-19-correct source resolution** via `bippy`. Today the overlay does
+  hover-highlight + leaf-only click capture and resolves source by hand
+  (`packages/overlay/src/selector.ts` → `inspectFiber`, reading `_debugSource`,
+  which React 19 drops).
+- **(B) Runtime-gated loader** — the overlay must be includable in **production
+  builds** yet load **zero bytes for normal users**, activating only on a
+  **host-owned runtime decision** (userId/role/flag) or a manual call (e.g. from
+  vConsole). This replaces today's build-time `NODE_ENV` gate.
+- **(C) React 19+ project rule** — this project supports **React ≥ 19 only**.
+
+Multi-element (drag) selection is **Phase 2** (separate PR; it changes the bridge
+contract) and is out of scope here.
 
 ## 2. Goals / Non-goals
 
-**Goals (Phase 1)**
-- Replace the overlay's `selecting`-mode hover-highlight + click capture with
-  react-grab's selection UI while a comment is being placed.
-- **Component-unit selection** with ↑↓ stack navigation (react-grab native).
-- **Component-name + source label** on the highlight (react-grab native).
-- **Source accuracy** on React 19 — let react-grab resolve `file:line:col`;
-  fall back to our existing `inspectFiber` when it returns nothing.
-- Deliver react-grab as a **separate, on-demand chunk** so the base
-  `overlay.js` download stays lean (it is loaded only when the user enters
-  comment mode).
-- Keep `rrw-setup` / vendoring working (now a multi-file artifact).
+**Goals**
+- Component-unit selection + ↑↓ stack navigation + component-name label
+  (react-grab native).
+- React-19-correct source: fill `Captured.source`/`component` from
+  `api.getSource(element)`; fall back to `inspectFiber` when it returns null.
+- react-grab loads **lazily on first activation**, shipped **inside `overlay.js`**
+  (single vendored artifact preserved).
+- Host-owned runtime activation via a React hook **and** an imperative API; normal
+  users fetch nothing.
+- Enforce React ≥ 19 (peer dep + setup gate + docs).
 
 **Non-goals**
-- **Multi-element (drag) selection** — deferred to Phase 2 because it changes the
-  bridge contract (`Comment`/`NewComment` gain `targets: Captured[]`) and ripples
-  into `docs/PROTOCOL.md` and the agent. Out of scope here.
-- Disabling react-grab's own context-menu/toast/clipboard — not configurable;
-  we design around it instead (see §4).
-- Production-build source resolution — runtime fiber resolution yields
-  `file:line` only in **dev builds**. This is a dev-time tool, so dev builds are
-  the expected environment. Documented, not solved.
-- Changing the `rrw.config.json` schema or the bridge data model.
+- Multi-element drag selection (Phase 2 — `Comment.targets: Captured[]`, bridge +
+  `docs/PROTOCOL.md` + agent).
+- Source **column** numbers — `api.getSource` returns `file:line` only; we drop the
+  `:col` we emit today (verified acceptable pending a smoke-test, §9).
+- Built-in query-string/localStorage activation triggers — the **host owns** the
+  decision; we only provide the hook + imperative entry points.
+- Production source resolution — runtime fiber/bippy resolution yields `file:line`
+  only in **dev/source-mapped** builds; minified prod yields component-name only or
+  null. Documented, not solved (dev-time tool).
 
-## 3. Approach (decisions locked during brainstorming)
+## 3. Decisions locked (with the spike evidence that grounds each)
 
-- **A — integrate react-grab as the selection engine** (vs. re-implementing the
-  features ourselves). Chosen because the user wants react-grab's full feature
-  set and a maintained implementation.
-- **Multi-file code-splitting** delivery: drop `inlineDynamicImports` *for the
-  react-grab path only*. `html2canvas` stays inlined as today. Result:
-  `overlay.js` + `overlay-grab-[hash].js`.
-- **Phase 1 = single-element only.** Multi-select is a separate future PR.
-- react-grab resolves source **at runtime, no build-time plugin** → consumer
-  setup story (`rrw-setup`) is unchanged except for copying the extra chunk.
+- **(A) Integrate react-grab as the selection engine**, single-file inline, lazy on
+  first `activate()`. Keep `inlineDynamicImports: true` — splitting react-grab into
+  a separate chunk would break the single-`overlay.js` vendoring contract
+  (CLAUDE.md) and re-open html2canvas single-file handling, for **no real benefit**:
+  the whole overlay is already a runtime-gated lazy chunk (§B), so react-grab is
+  never in any user's initial bundle regardless.
+- **Bundling is browser-safe.** react-grab's `.` ESM export is browser-pure; the
+  Node `@react-grab/cli` dep is reachable only from `bin/cli.js` and is tree-shaken.
+  Add `rollupOptions.external += "@react-grab/cli"` + `optimizeDeps.exclude` as
+  belt-and-suspenders. (Adversarial bundling check: 2/3 refuters failed to refute;
+  the 1 "refute" conflated a declared-but-unimported dep with a bundled one.)
+- **Source = `getSource` primary, `inspectFiber` fallback**, format `file:line`
+  (drop `:col`). This is the actual React-19 accuracy win (bippy handles
+  `_debugStack`); `_debugSource` that `inspectFiber` reads is gone in React 19.
+- **(B) Runtime gating, host-owned.** Replace the `NODE_ENV` build gate with a thin
+  always-present loader exposing `useRrwOverlay(enabled)` + `window.__rrw` +
+  `startRrw/stopRrw`. The heavy `import("./overlay.js")` runs only when the host
+  enables it → normal users get 0 bytes.
+- **(C) React ≥ 19 only.** Bump overlay peer deps; gate in `rrw-setup`; document.
 
-## 4. Responsibility split (the core integration idea)
+## 4. react-grab integration (A) — the GrabEngine seam
 
-react-grab's own UI and clipboard copy **cannot be disabled**. We avoid conflict
-by splitting the interaction **in time**:
-
-- **Selection phase → react-grab owns it.** Hover highlight box, component-name
-  label, ↑↓ component-stack navigation. Our overlay's existing `selecting`-mode
-  hover-highlight + click capture (`DesignCommentOverlay.tsx:84-119`,
-  `rrw-highlight`) is **disabled while react-grab is active**.
-- **Comment phase → we own it.** Draft card, screenshot, bridge submit, status —
-  all unchanged, all in our Shadow DOM.
-- **Clipboard**: react-grab copies on grab and we cannot stop it. We override
-  `getContent` to emit a minimal/useful string. The copy is treated as a benign
-  side effect (it is even useful for pasting into an external agent).
-- **react-grab renders in light DOM**, our overlay in Shadow DOM. They never draw
-  simultaneously (selection phase vs comment phase), which keeps visual conflict
-  to the hand-off moment only.
-
-## 5. Data flow
-
-```
-user enters comment mode
-  → import("react-grab")            // separate chunk, on-demand, cached after first load
-  → engine.activate()
-  → user selects an element / walks the component stack (react-grab UI)
-  → engine.onGrab({ element, source, component })   // source = "file:line:col", component = name; either may be null
-  → engine.deactivate()
-  → capture(element, source)        // our selector.ts maps to Captured
-  → draft card opens → comment text + screenshot → submit to bridge   // unchanged
-```
-
-**Source resolution order:** react-grab's runtime resolution first; if it returns
-nothing, fall back to our existing `inspectFiber(element)`. The merged result
-fills the existing `Captured.source` / `Captured.component` fields — **no schema
-change**, the bridge contract is untouched.
-
-## 6. The GrabEngine seam (for TDD)
-
-react-grab is wrapped behind a small adapter interface so the overlay never
-imports it directly and unit tests inject a fake:
+react-grab is wrapped behind an adapter so the overlay never imports it directly
+and unit tests inject a fake (repo "side-effects via runner injection" rule).
 
 ```ts
-export interface GrabSelection {
-  element: Element;
-  source: string | null;     // "file:line:col" when react-grab resolves it
-  component: string | null;
-}
+// packages/overlay/src/grab-engine.ts
+export interface Grab { element: Element; source: string | null; component: string | null }
 export interface GrabEngine {
   activate(): void;
   deactivate(): void;
-  onGrab(cb: (sel: GrabSelection) => void): () => void;  // returns unsubscribe
+  onGrab(cb: (g: Grab) => void): () => void; // returns unsubscribe
+  dispose(): void;
+}
+export async function loadGrabEngine(): Promise<GrabEngine> { /* real adapter, below */ }
+```
+
+**Real adapter (`loadGrabEngine`) — every line grounded by the spike:**
+
+1. `window.__REACT_GRAB_DISABLED__ = true` **before** `await import("react-grab")` —
+   react-grab auto-inits at module-eval (verified literal in `dist/index.js`), and
+   default auto-init fires a telemetry fetch to react-grab.com (bad offline /
+   Tailscale).
+2. `const api = getGlobalApi() ?? init({ telemetry: false, freezeReactUpdates: false })`.
+   - `telemetry: false` — no outbound calls (only outbound call in the artifact is
+     the version check).
+   - `freezeReactUpdates: false` — **critical**: default `true` monkeypatches the
+     **global** React dispatcher (`useState/useReducer/useTransition/
+     useSyncExternalStore`) across all React trees, which would freeze **our own**
+     overlay. Tradeoff: host page may shift slightly during selection (accepted).
+   - `getGlobalApi()` first — singleton-aware; never assume we own the only instance.
+3. `api.registerPlugin({ name, theme, hooks })` — hooks attach to a **Plugin**, not
+   `init()` (Options has no `hooks`/`theme`). `theme: { toolbar:{enabled:false},
+   grabbedBoxes:{enabled:false} }` suppresses react-grab's own chrome so only our
+   highlight + draft card render.
+4. `hooks.onElementSelect = async (el) => { const s = await api.getSource(el);
+   emit({ element: el, source: s?.filePath ? (s.lineNumber!=null ?
+   ` + "`${s.filePath}:${s.lineNumber}`" + ` : s.filePath) : null, component:
+   s?.componentName ?? null }); return false }` — **`return false` suppresses the
+   default clipboard copy + success flash** (inferred from the minified copy
+   pipeline; §9 smoke-test #5 verifies at runtime).
+5. `dispose()` → `unregisterPlugin(name)` + `api.dispose()` (no auto-cleanup on React
+   unmount).
+
+**Overlay wiring (`DesignCommentOverlay.tsx`):** the engine **replaces** the manual
+`mousemove`/`click`/`elementFromPoint` inspector in the `mode==="selecting"`
+effect (~lines 86–128). On first entering selecting mode, `await loadGrabEngine()`
+once (memoize the promise in a ref), `engine.onGrab` → run existing `capture(el)`
+for `selector/rect/text/classes/tag` then **override** `source`/`component` with the
+grab's values, open the draft card (reuse `clampToViewport` placement), then
+`engine.activate()`. On Esc/exit → `deactivate()`. On unmount → `dispose()`.
+`inspectFiber` stays as the fallback inside `capture` when the grab's source is null.
+
+## 5. Runtime-gated loader (B) — host-owned activation
+
+A thin always-present module (vendored into the host, no static import of
+`overlay.js`) with a single lazy-load-once controller shared by both entry points:
+
+```ts
+// components/rrw/rrw-loader.ts  (vendored; tiny — only this is in the host bundle)
+let unmount: (() => void) | undefined;
+let starting: Promise<void> | undefined;
+
+export async function startRrw(): Promise<void> {
+  if (unmount || starting) return starting;        // idempotent
+  starting = import("./overlay.js").then((m) => {
+    unmount = m.mountOverlay({
+      bridgeUrl: cfg.bridgeUrl ?? "http://localhost:4317",
+      token: cfg.clientToken ?? cfg.token ?? "",
+      author: cfg.author,
+    });
+  }).finally(() => { starting = undefined; });
+  return starting;
+}
+export function stopRrw(): void { unmount?.(); unmount = undefined; }
+export function isRrwRunning(): boolean { return !!unmount; }
+
+if (typeof window !== "undefined") {
+  (window as Window & { __rrw?: unknown }).__rrw = { start: startRrw, stop: stopRrw, isRunning: isRrwRunning };
 }
 ```
 
-- **Production factory** `loadGrabEngine(): Promise<GrabEngine>` does the
-  `import("react-grab")`, configures it (`getContent` override, activation mode),
-  and maps its hooks (`onGrabbedBox` / `transformActionContext`) onto
-  `GrabEngine`.
-- **Tests** inject a `fakeGrabEngine` so the comment-mode flow is verified with no
-  real import and no real DOM grab — consistent with the repo's
-  "side-effects via runner injection" rule (CLAUDE.md / CONTRIBUTING.md).
-- `DesignCommentOverlay` receives the engine via prop/factory so the existing
-  component tests keep working and a new test drives:
-  enter-mode → activate → fake grab → draft opens with source/component filled.
+React hook (declarative; host computes `enabled` from its own userId/role/flag):
 
-## 7. Build / vendoring changes
+```ts
+// components/rrw/useRrwOverlay.ts
+export function useRrwOverlay(enabled: boolean): void {
+  useEffect(() => {
+    if (!enabled) return;
+    void startRrw();
+    return () => stopRrw();
+  }, [enabled]);
+}
+```
 
-- `packages/overlay/vite.config.ts`: keep `inlineDynamicImports` behavior for
-  html2canvas, but allow the react-grab `import()` to split into its own chunk.
-  (Likely: a second `rollupOptions.output` manualChunk / a build that emits
-  `overlay.js` + `overlay-grab-[hash].js`; exact mechanism settled in the plan.)
-- `react` / `react-dom` stay external (host-provided), as today.
-- **Vendoring + `rrw-setup`** currently assume a single `overlay.js`. They must
-  copy/serve **all** emitted chunks and keep the chunk reachable from the host at
-  runtime (relative path next to `overlay.js`). This is the widest ripple of the
-  change and gets explicit integration-test coverage (the build emits ≥2 files;
-  the setup copies them all).
+- **Normal users:** `enabled` stays false / nobody calls `start` → `import()` never
+  runs → the `overlay.js` chunk (react-grab inside) is **never fetched**.
+- **Privileged users:** host flips `enabled` true (or calls `window.__rrw.start()` /
+  vConsole) → lazy chunk loads once → overlay mounts.
+- **No `NODE_ENV` gate** — works in production builds by design.
+
+`rrw-setup` (SKILL.md §3–4) changes: vendor `rrw-loader.ts` + `useRrwOverlay.ts`
+alongside `overlay.js`; wire via the hook (`useRrwOverlay(host-decides)`) instead of
+`{process.env.NODE_ENV !== "production" && <RrwOverlay/>}`.
+
+## 6. React 19+ rule (C)
+
+- `packages/overlay/package.json` peerDependencies: `react`/`react-dom` `>=18` →
+  `>=19`.
+- `rrw-setup` SKILL.md §2 (Detect the stack): read host `package.json` React
+  version; **refuse/warn if < 19** with a clear message.
+- Docs: README + CLAUDE.md "Node ≥ 22" line → add "React ≥ 19".
+
+## 7. Build / vendoring
+
+- `packages/overlay/package.json`: `react-grab` is a direct dependency.
+- `vite.config.ts`: **keep** `inlineDynamicImports: true`; add
+  `rollupOptions.external: [..., "@react-grab/cli"]` and (dev)
+  `optimizeDeps.exclude: ["@react-grab/cli"]`. `react`/`react-dom` stay external.
+- Output stays a single `overlay.js` (+ existing `styles.css` inlined). Vendoring
+  contract (CLAUDE.md) **unchanged** beyond adding the two new loader files.
+- react-grab's `styles.css` is **not** auto-injected and, with chrome themed off,
+  likely renders no react-grab DOM → do **not** import it unless §9 smoke-test #4
+  shows stray unstyled chrome.
 
 ## 8. Testing strategy (TDD — repo Iron Law)
 
-- **Overlay unit/component (Vitest + Testing Library):**
-  - comment-mode entry calls `engine.activate()`; exit calls `deactivate()`.
-  - a fake `onGrab` opens the draft card with `Captured.source`/`component`
-    populated from the selection.
-  - source-resolution fallback: when `GrabSelection.source` is null, `capture`
-    falls back to `inspectFiber` (existing tests stay green).
-  - our legacy `selecting` hover-highlight/click handlers are NOT attached while
-    the engine is active (no double-capture).
-- **selector.ts:** `capture(el, source?)` precedence — explicit source wins over
-  fiber-derived; existing `inspectFiber` tests unchanged.
-- **Build/vendoring integration:** `pnpm --filter @rrw/overlay build` emits the
-  base file + a react-grab chunk; the setup/vendoring step copies every emitted
-  artifact (temp-dir integration test, mirroring the repo's real-git PR tests).
+**Unit / component (Vitest + Testing Library), fully deterministic:**
+- `grab-engine` adapter: with a fake `react-grab` module, assert `loadGrabEngine`
+  sets `__REACT_GRAB_DISABLED__` before import, calls `init` with
+  `telemetry:false`+`freezeReactUpdates:false`, registers a plugin with the chrome
+  theme off, and that `onElementSelect` emits a `Grab` and returns `false`.
+- `DesignCommentOverlay`: inject a fake `GrabEngine`; entering selecting mode calls
+  `activate()`, a fake grab opens the draft card with `source`/`component` filled,
+  exit calls `deactivate()`, unmount calls `dispose()`; the legacy
+  `mousemove`/`click` inspector is **not** attached while the engine drives.
+- `selector.ts`: `capture(el, override?)` precedence — an explicit grab source wins;
+  `inspectFiber` fallback when override is null (existing tests stay green).
+- `rrw-loader`: `startRrw` is idempotent (concurrent calls share one `import`),
+  `stopRrw` unmounts, `window.__rrw` is wired; `useRrwOverlay(false)` never imports,
+  `useRrwOverlay(true)` starts and cleans up on unmount/`enabled→false`. Mock the
+  dynamic import.
 
-## 9. Risks & open decisions
+**Build/vendoring integration:** `pnpm --filter @rrw/overlay build` emits a single
+`overlay.js` that contains react-grab and does **not** contain `@react-grab/cli`
+(grep the artifact). `rrw-setup` copies `overlay.js` + the two loader files.
 
-| Risk | Severity | Mitigation |
-|------|----------|------------|
-| `onGrabbedBox` + `transformActionContext` may not hand back structured `file:line:col` cleanly | Med | First plan step is a spike; if absent, take only the `element` and resolve via our `inspectFiber` fallback — feature still ships, just no accuracy gain on React 19 until resolved |
-| react-grab context-menu/toast visually clashes with our card at hand-off | Med | `deactivate()` before opening the draft; verify z-index / light-DOM vs Shadow DOM boundary during integration |
-| Multi-file vendoring breaks an existing single-file assumption somewhere | Med | Integration test asserting all chunks are copied + reachable; audit `rrw-setup` copy logic |
-| react-grab bundle is large even as a separate chunk | Low | It is on-demand and cached; base download unaffected (the whole point of §3) |
-| Production host app → empty `file:line`, component-name only | Low | Documented dev-time limitation; matches existing fiber-based behavior |
+**Runtime smoke-tests (manual, against a real React-19 app)** — these cover the
+spike's residual unknowns (§9); they are checklist items in the plan, not unit
+tests.
 
-## 10. Phasing (implementation order)
+## 9. Residual unknowns → first runtime smoke-tests (from the spike)
 
-1. **Spike** — confirm react-grab's runtime API hands back `{element, source}` and
-   that `getContent`/activation can be configured headlessly enough. Lock the
-   `loadGrabEngine` mapping.
-2. **GrabEngine seam** — interface + fake + a thin real adapter (TDD).
-3. **Overlay wiring** — comment mode activates/deactivates the engine; grab opens
-   the draft; legacy hover/click disabled while active; source fallback in
-   `capture`.
-4. **Build split** — emit the react-grab chunk; keep html2canvas inlined.
-5. **Vendoring / `rrw-setup`** — copy all chunks; integration test.
-6. **Docs** — note the dev-build source limitation; update overlay README/section.
+1. **Column dependency:** does the bridge/apply pipeline rely on `:col`? If yes,
+   reconsider dropping it. (Expected: no.)
+2. **Programmatic activation:** `api.activate()` enters selection without the user
+   also pressing react-grab's own activation key; no stray react-grab key listeners
+   hijack host input.
+3. **Shadow-DOM hit-testing:** clicking our own FAB/draft card is **not** captured by
+   react-grab as a selectable element; hover targets host elements, not the overlay.
+4. **styles.css:** confirm nothing from react-grab renders unstyled; import
+   `react-grab/styles.css` only if needed.
+5. **Copy suppression:** `onElementSelect` returning `false` actually prevents the
+   clipboard write + success flash (inferred, not executed). If not, also guard
+   `onBeforeCopy`/`transformCopyContent`.
+6. **Freeze tradeoff:** with `freezeReactUpdates:false`, overlay (draft card,
+   progress panel) stays interactive during selection and the host stays usable.
+7. **dispose() restoration:** after activate→select→deactivate→dispose, the global
+   dispatcher patches are reverted and re-mounting re-inits cleanly (`getGlobalApi()`
+   must not return a dead handle post-dispose).
+
+## 10. Security / trust model (B widens exposure — document it)
+
+Runtime gating is **host-owned**; when the host computes `enabled` from
+authenticated state (userId/role) it is a real access control. But the project-level
+boundary is unchanged and must be documented so a guessable gate is never mistaken
+for security:
+
+- Bridge stays **network-gated** (Tailscale/Cloudflare Access) — a normal user's
+  browser cannot reach an internal `bridgeUrl`.
+- `clientToken` is **low-trust** (browser-visible by design); in a runtime-gated prod
+  build it sits in the lazy chunk and is exposed to anyone who can load it — so the
+  bridge's network gating + the **operator-gated `apply`** remain the real defenses.
+  Loading the overlay can never trigger code edits.
+- Matches the existing two-trust-tier model (CLAUDE.md).
+
+## 11. Phasing (implementation order)
+
+1. **React 19 rule (C)** — peer deps, `rrw-setup` gate, docs. Small, independent.
+2. **GrabEngine seam (A)** — interface + fake + real adapter (TDD).
+3. **Overlay wiring (A)** — engine drives selecting mode; `capture` source override;
+   legacy inspector removed; fallback intact.
+4. **Build guards** — `external`/`optimizeDeps.exclude` for `@react-grab/cli`;
+   artifact integration test.
+5. **Runtime-gated loader (B)** — `rrw-loader.ts` + `useRrwOverlay.ts` (TDD) +
+   `rrw-setup` rewiring (hook instead of `NODE_ENV`).
+6. **Runtime smoke-tests (§9)** against a real React-19 app; fix what they surface.
+7. **Docs** — README/overlay section: runtime gating, host-owned activation, the
+   dev-build source limitation, security framing.
 
 **Phase 2 (separate PR, out of scope):** drag multi-select →
 `Comment`/`NewComment.targets: Captured[]` → bridge + `docs/PROTOCOL.md` + agent.
