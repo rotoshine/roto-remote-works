@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { cssPath, inspectFiber, capture } from "./selector";
 
 beforeEach(() => {
@@ -45,5 +45,25 @@ describe("capture", () => {
     expect(cap.rect).not.toBeNull();
     expect(cap.component).toBeNull();
     expect(cap.source).toBeNull();
+  });
+});
+
+describe("capture with override", () => {
+  it("prefers an explicit source/component over fiber inspection", () => {
+    const el = document.createElement("div");
+    const c = capture(el, { source: "src/Foo.tsx:3", component: "Foo" });
+    expect(c.source).toBe("src/Foo.tsx:3");
+    expect(c.component).toBe("Foo");
+  });
+
+  it("falls back to fiber inspection per-field when override is null", () => {
+    const el = document.createElement("div");
+    const c = capture(
+      el,
+      { source: null, component: null },
+      () => ({ source: "fallback:5", component: "FallbackComponent" }),
+    );
+    expect(c.source).toBe("fallback:5");
+    expect(c.component).toBe("FallbackComponent");
   });
 });
