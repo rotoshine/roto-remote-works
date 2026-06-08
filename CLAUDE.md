@@ -10,7 +10,7 @@
 - **CONTRIBUTING.md** — 개발 셋업·TDD 규칙·패키지맵·자주 하는 작업(어댑터/설정/라우트 추가)
 - **docs/PROTOCOL.md** — 에이전트-중립 코멘트 처리 규약
 
-## 구조 (pnpm 모노레포, Node ≥ 22)
+## 구조 (pnpm 모노레포, Node ≥ 22, 소비자 앱은 React ≥ 19)
 - `packages/bridge` — Hono 서버 + 파일 상태 저장소(`Store`) + `rrw-bridge` CLI. 코멘트/apply요청/진행/질문의 **단일 진실 공급원**.
 - `packages/overlay` — React+Vite+Tailwind 오버레이. 호스트 앱에 **vendoring**(Shadow DOM, 자체 CSS). 요소 클릭→코멘트+스크린샷, 진행/결과 표시.
 - `packages/agent` — `rrw` CLI(`pull/status/comment/resolve/screenshot/done/ask/run/worker/watch/doctor/init`) + 처리 로직(worker 루프, PR delivery, base 자동감지, doctor).

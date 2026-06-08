@@ -17,6 +17,10 @@ Add `.rrw/` to the project `.gitignore`.
 
 ## 2. Detect the stack
 Read the project `package.json`:
+- **Require React ≥ 19.** Read the host's resolved `react` version. If it is **< 19**,
+  STOP and tell the user: "roto-remote-works는 React 19 이상만 지원합니다 (현재
+  <version>). 설치를 중단합니다." Do not vendor or wire anything. (This is a hard break;
+  React 18 hosts must pin an older tag of this tool.)
 - **Next.js** (`next` dep) → App Router layout (`app/layout.tsx`) or `_app`.
 - **Vite + React** (`vite` + `react`) → `src/main.tsx`.
 - Note Tailwind / vanilla-extract / shadcn — **irrelevant to the overlay** (it ships its own styles), but informs which React skills to install.
