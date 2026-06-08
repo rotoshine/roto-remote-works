@@ -15,6 +15,10 @@
 - Node.js ≥ 22
 - pnpm
 
+> **소스 매핑은 dev 빌드 전용입니다.** react-grab/bippy는 React fiber의 디버그
+> 정보(`_debugStack`)에서 `file:line` 을 추출합니다. 프로덕션/미니파이 빌드에서는
+> 컴포넌트 이름만 얻거나 `null` 이 됩니다. 이 도구는 **개발 시점**에만 사용하세요.
+
 ## ✨ 빠른 설치 (React 프로젝트에서 Claude Code에 붙여넣기)
 
 ```
@@ -38,11 +42,14 @@ Claude가 수행하는 것: 도구 clone → 오버레이 빌드·**vendoring**(
 - **bridge** (`packages/bridge`, Hono) — 단일 진실 공급원(코멘트, apply 요청,
   진행 상태, 질문). clone에서 실행하며 기본은 `127.0.0.1`, 원격은 사설 터널 뒤에 둡니다.
 - **overlay** (`packages/overlay`, React+Vite+Tailwind) — 앱에 vendoring되어
-  **Shadow DOM** 안에서 자체 스타일(파란 테마)로 렌더됩니다. React fiber로 소스
-  `file:line`을 찾고, 코멘트마다 **뷰포트 스크린샷**을 캡처(lazy html2canvas)해
-  "여기 간격 이상" 같은 느슨한 시각 피드백도 에이전트가 *볼* 수 있게 합니다. 패널은
-  코멘트별 **상태 뱃지**(열림 ● / 진행 ⟳ / 완료 ✓)와 적용 결과·**PR 링크 배너**를
-  보여줘 비엔지니어도 진행/결과를 확인합니다.
+  **Shadow DOM** 안에서 자체 스타일(파란 테마)로 렌더됩니다. react-grab + React
+  fiber로 소스 `file:line`을 찾고(dev 빌드 전용; 상세는 [소스 매핑](#소스-매핑--dev-빌드-전용) 참고),
+  코멘트마다 **뷰포트 스크린샷**을 캡처(lazy html2canvas)해 "여기 간격 이상" 같은
+  느슨한 시각 피드백도 에이전트가 *볼* 수 있게 합니다. 패널은 코멘트별 **상태
+  뱃지**(열림 ● / 진행 ⟳ / 완료 ✓)와 적용 결과·**PR 링크 배너**를 보여줘
+  비엔지니어도 진행/결과를 확인합니다.
+  오버레이는 **호스트가 활성화할 때만 로드**됩니다(런타임 게이팅) — 일반
+  사용자는 0 바이트를 받습니다.
 - **agent** (`packages/agent`) — `rrw` CLI + Claude 세션이 코멘트를 적용하고
   진행 상황을 보고하고 웹으로 질문하는 데 쓰는 `rrw-process` 스킬.
 
@@ -68,6 +75,48 @@ Claude가 수행하는 것: 도구 clone → 오버레이 빌드·**vendoring**(
   `RRW_HOST`, `RRW_DATA_DIR`, `RRW_AUTHOR`, `RRW_ORIGIN`)을 환경변수로 줄 수 있습니다.
 - 브라우저 오버레이는 클라이언트 측에서 토큰이 필요하므로 **저신뢰** 값을 쓰세요.
   고신뢰/원격 토큰을 브라우저로 보내는 코드에 절대 넣지 마세요.
+
+## 오버레이 활성화 — 런타임 게이팅
+
+오버레이는 **빌드 조건이 아니라 호스트가 런타임에 제어**합니다. 일반 사용자는 0
+바이트를 받고, 권한이 있는 사용자(개발자/디자이너)에게만 lazy import가 실행됩니다.
+
+### React 훅 (권장)
+
+```tsx
+import { useRrwOverlay } from './rrw-loader' // rrw-setup이 vendoring
+
+function App() {
+  const isDesigner = useAuth().role === 'designer'
+  useRrwOverlay(isDesigner, {
+    bridgeUrl: 'http://localhost:4317',
+    token: '<clientToken>',   // 저신뢰 clientToken만 — 고신뢰 token은 절대 브라우저에 넣지 말 것
+  })
+  return <YourApp />
+}
+```
+
+`enabled` 가 `false` 이면 아무것도 로드되지 않습니다. `true` 로 바뀌는 순간 lazy
+`import('./overlay.js')` 가 실행됩니다. 이후 `false` 로 바뀌면 오버레이가 언마운트됩니다.
+
+### 명령형 (vConsole 등에서 편리)
+
+```js
+// 시작
+window.__rrw.start({ bridgeUrl: 'http://localhost:4317', token: '<clientToken>' })
+
+// 중지
+window.__rrw.stop()
+```
+
+`window.__rrw` 는 loader가 항상 노출하는 얇은 객체입니다(overlay.js 로드 전에도 접근
+가능). vConsole이나 브라우저 DevTools 콘솔에서 직접 켜고 끌 수 있습니다.
+
+### 소스 매핑 — dev 빌드 전용
+
+react-grab/bippy는 React 19의 fiber 디버그 정보에서 `file:line` 을 추출합니다.
+프로덕션/미니파이 빌드에서는 컴포넌트 이름만 얻거나 `null` 이 됩니다 — 에이전트는
+`selector`, `classes`, `text`, `screenshot` 을 fallback으로 사용합니다.
 
 ## 브리지 실행
 
