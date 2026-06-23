@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "peerDependencies": {
-    "react": ">=18",
-    "react-dom": ">=18"
+    "react": ">=19",
+    "react-dom": ">=19"
   },
   "dependencies": {
-    "html2canvas": "^1.4.1"
+    "html2canvas": "^1.4.1",
+    "react-grab": "^0.1.44"
   },
   "scripts": {
     "build": "vite build",

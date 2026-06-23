@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DesignCommentOverlay } from "./DesignCommentOverlay";
 import type { BridgeClient } from "./client";
 import type { Comment, CommentStatus, Question, Status } from "./types";
+import type { GrabEngine, Grab } from "./grab-engine";
 
 const idle: Status = { state: "idle", currentStep: null, perComment: {}, result: null, updatedAt: "t" };
 
@@ -32,6 +33,23 @@ function fakeClient(over: Partial<BridgeClient> = {}): BridgeClient {
   };
 }
 
+function fakeEngine() {
+  let emit: ((g: Grab) => void) | undefined;
+  const engine: GrabEngine = {
+    activate: vi.fn(),
+    deactivate: vi.fn(),
+    onGrab: vi.fn((cb) => {
+      emit = cb;
+      return () => {
+        emit = undefined;
+      };
+    }),
+    dispose: vi.fn(),
+  };
+  const waitReady = () => vi.waitUntil(() => emit !== undefined);
+  return { engine, waitReady, grab: (g: Grab) => emit?.(g) };
+}
+
 const pendingQ: Question = {
   id: "q1", text: "Which color?", options: ["blue", "red"], status: "pending", answer: null, askedAt: "t",
 };
@@ -53,21 +71,26 @@ describe("DesignCommentOverlay", () => {
   it("places the comment draft on-screen even when clicking near the bottom-right edge", async () => {
     const target = document.createElement("div");
     document.body.appendChild(target);
-    const orig = document.elementFromPoint;
-    document.elementFromPoint = () => target;
+    target.getBoundingClientRect = () =>
+      ({ x: 1020, y: 760, width: 10, height: 10, top: 760, left: 1020, right: 1030, bottom: 770, toJSON() {} }) as DOMRect;
     try {
-      render(<DesignCommentOverlay client={fakeClient()} />);
+      const { engine, waitReady, grab } = fakeEngine();
+      render(<DesignCommentOverlay client={fakeClient()} pollMs={0} grabEngineLoader={async () => engine} />);
       await userEvent.click(screen.getByRole("button", { name: /코멘트/ })); // selecting mode
-      fireEvent.click(target, { clientX: 1020, clientY: 760 }); // jsdom viewport 1024x768
-      const card = document.querySelector(".rrw-draft") as HTMLElement | null;
-      expect(card).not.toBeNull();
-      const left = parseInt(card!.style.left, 10);
-      const top = parseInt(card!.style.top, 10);
+      await waitFor(() => expect(engine.activate).toHaveBeenCalled());
+      await waitReady();
+      grab({ element: target, source: null, component: null });
+      const card = await waitFor(() => {
+        const el = document.querySelector(".rrw-draft") as HTMLElement | null;
+        expect(el).not.toBeNull();
+        return el!;
+      });
+      const left = parseInt(card.style.left, 10);
+      const top = parseInt(card.style.top, 10);
       expect(left).toBeLessThanOrEqual(1024 - 288 - 12); // 724
       expect(left).toBeGreaterThanOrEqual(12);
       expect(top).toBeLessThanOrEqual(768 - 200 - 12); // 556
     } finally {
-      document.elementFromPoint = orig;
       target.remove();
     }
   });
@@ -75,30 +98,37 @@ describe("DesignCommentOverlay", () => {
   it("lets the draft card be dragged by its handle", async () => {
     const target = document.createElement("div");
     document.body.appendChild(target);
-    const orig = document.elementFromPoint;
-    document.elementFromPoint = () => target;
+    target.getBoundingClientRect = () =>
+      ({ x: 300, y: 300, width: 50, height: 20, top: 300, left: 300, right: 350, bottom: 320, toJSON() {} }) as DOMRect;
     try {
-      render(<DesignCommentOverlay client={fakeClient()} />);
+      const { engine, waitReady, grab } = fakeEngine();
+      render(<DesignCommentOverlay client={fakeClient()} pollMs={0} grabEngineLoader={async () => engine} />);
       await userEvent.click(screen.getByRole("button", { name: /코멘트/ }));
-      fireEvent.click(target, { clientX: 300, clientY: 300 });
-      const card = () => document.querySelector(".rrw-draft") as HTMLElement;
-      const before = card().style.left;
+      await waitFor(() => expect(engine.activate).toHaveBeenCalled());
+      await waitReady();
+      grab({ element: target, source: null, component: null });
+      const card = () => waitFor(() => {
+        const el = document.querySelector(".rrw-draft") as HTMLElement;
+        expect(el).not.toBeNull();
+        return el;
+      });
+      const before = (await card()).style.left;
       const handle = document.querySelector(".rrw-draft-handle") as HTMLElement;
       fireEvent.mouseDown(handle, { clientX: 300, clientY: 300 });
       fireEvent.mouseMove(document, { clientX: 200, clientY: 300 }); // drag left 100px
       fireEvent.mouseUp(document);
-      expect(card().style.left).not.toBe(before);
+      expect((await card()).style.left).not.toBe(before);
     } finally {
-      document.elementFromPoint = orig;
       target.remove();
     }
   });
 
   it("lists comments with status badges, including resolved ones", async () => {
+    const { engine } = fakeEngine();
     const client = fakeClient({
       listComments: async () => [comment("c1", "열림 코멘트", "open"), comment("c2", "완료된 코멘트", "resolved")],
     });
-    render(<DesignCommentOverlay client={client} pollMs={10} />);
+    render(<DesignCommentOverlay client={client} pollMs={10} grabEngineLoader={async () => engine} />);
     await userEvent.click(screen.getByRole("button", { name: /코멘트/ })); // open the panel
     expect(await screen.findByText("열림 코멘트")).toBeInTheDocument();
     expect(await screen.findByText("완료된 코멘트")).toBeInTheDocument();
@@ -115,7 +145,8 @@ describe("DesignCommentOverlay", () => {
     const orig = document.elementFromPoint;
     document.elementFromPoint = () => target;
     try {
-      render(<DesignCommentOverlay client={fakeClient()} />);
+      const { engine } = fakeEngine();
+      render(<DesignCommentOverlay client={fakeClient()} grabEngineLoader={async () => engine} />);
       // not selecting yet → no highlight
       expect(document.querySelector("[data-rrw-highlight]")).toBeNull();
       await userEvent.click(screen.getByRole("button", { name: /코멘트/ })); // enter selecting mode
@@ -156,5 +187,64 @@ describe("DesignCommentOverlay", () => {
     render(<DesignCommentOverlay client={client} pollMs={10} />);
     expect(await screen.findByText(/fixing header/)).toBeInTheDocument();
     expect(await screen.findByText("make bigger")).toBeInTheDocument();
+  });
+
+  it("activates the engine in selecting mode and opens a draft on grab", async () => {
+    const { engine, waitReady, grab } = fakeEngine();
+    render(<DesignCommentOverlay client={fakeClient()} pollMs={0} grabEngineLoader={async () => engine} />);
+    fireEvent.click(screen.getByRole("button", { name: /코멘트/ }));
+    await waitFor(() => expect(engine.activate).toHaveBeenCalled());
+    await waitReady();
+
+    const el = document.createElement("button");
+    document.body.appendChild(el);
+    grab({ element: el, source: "src/Button.tsx:12", component: "Button" });
+
+    await waitFor(() => expect(screen.getByText(/<Button>/)).toBeInTheDocument());
+  });
+
+  it("ignores grabs on the overlay's own host", async () => {
+    const { engine, waitReady, grab } = fakeEngine();
+    render(<DesignCommentOverlay client={fakeClient()} pollMs={0} grabEngineLoader={async () => engine} />);
+    fireEvent.click(screen.getByRole("button", { name: /코멘트/ }));
+    await waitFor(() => expect(engine.activate).toHaveBeenCalled());
+    await waitReady();
+
+    const host = document.createElement("div");
+    host.setAttribute("data-rrw-host", "");
+    const inner = document.createElement("span");
+    host.appendChild(inner);
+    document.body.appendChild(host);
+    grab({ element: inner, source: null, component: null });
+
+    expect(screen.queryByPlaceholderText("이 요소 수정 요청…")).not.toBeInTheDocument();
+  });
+
+  it("deactivates on exit and disposes on unmount", async () => {
+    const { engine, waitReady } = fakeEngine();
+    const { unmount } = render(
+      <DesignCommentOverlay client={fakeClient()} pollMs={0} grabEngineLoader={async () => engine} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /코멘트/ }));
+    await waitFor(() => expect(engine.activate).toHaveBeenCalled());
+    await waitReady();
+    fireEvent.click(screen.getByRole("button", { name: /취소/ }));
+    await waitFor(() => expect(engine.deactivate).toHaveBeenCalled());
+    unmount();
+    await waitFor(() => expect(engine.dispose).toHaveBeenCalled());
+  });
+
+  it("disposes even if unmounted while the engine is still loading", async () => {
+    let resolve!: (e: GrabEngine) => void;
+    const pending = new Promise<GrabEngine>((r) => (resolve = r));
+    const { engine } = fakeEngine();
+    const { unmount } = render(
+      <DesignCommentOverlay client={fakeClient()} pollMs={0} grabEngineLoader={() => pending} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /코멘트/ }));
+    unmount();
+    resolve(engine);
+    await waitFor(() => expect(engine.dispose).toHaveBeenCalled());
+    expect(engine.onGrab).not.toHaveBeenCalled();
   });
 });

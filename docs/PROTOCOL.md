@@ -28,7 +28,7 @@ here is agent-specific — the per-agent adapters in `adapters/` just wire this 
    - `rrw comment <id> applying`
    - If `screenshot` is set: `rrw screenshot <id> /tmp/rrw-<id>.png` and **view it**
      (designer feedback is often loose/visual).
-   - Locate code: prefer `source` (`file:line:col`); else `selector`/`classes`/`text`.
+   - Locate code: prefer `source` (`file:line`); else `selector`/`classes`/`text`.
    - Edit (follow the project's React conventions / installed skills).
    - `rrw status --step "…"` as you progress; `rrw resolve <id>` when done.
 

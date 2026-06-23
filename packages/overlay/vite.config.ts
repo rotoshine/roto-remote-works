@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 // (injected into a Shadow DOM at runtime). React is external (host provides it).
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: { exclude: ["@react-grab/cli"] },
   build: {
     cssCodeSplit: false,
     lib: {
@@ -14,7 +15,7 @@ export default defineConfig({
       fileName: () => "overlay.js",
     },
     rollupOptions: {
-      external: ["react", "react-dom", "react/jsx-runtime", "react-dom/client"],
+      external: ["react", "react-dom", "react/jsx-runtime", "react-dom/client", "@react-grab/cli"],
       output: {
         // keep a single vendorable file even though html2canvas is dynamically imported
         inlineDynamicImports: true,

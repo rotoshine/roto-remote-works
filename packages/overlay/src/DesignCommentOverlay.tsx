@@ -1,5 +1,5 @@
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BridgeClient } from "./client";
 import type { ApplyOrigin, Comment, CommentStatus, Question, Status } from "./types";
 import { capture, type Captured } from "./selector";
@@ -7,6 +7,7 @@ import { clampToViewport, type Point } from "./position";
 import { submitComment } from "./submit";
 import { WebAskModal } from "./WebAskModal";
 import { ProgressPanel } from "./ProgressPanel";
+import { loadGrabEngine, type GrabEngine, type Grab } from "./grab-engine";
 
 export interface DesignCommentOverlayProps {
   client: BridgeClient;
@@ -16,6 +17,8 @@ export interface DesignCommentOverlayProps {
   captureScreenshot?: () => Promise<string | null>;
   /** Who is commenting (designer/PM/engineer); attached to each comment. */
   author?: string;
+  /** Injected for tests; defaults to the real react-grab adapter. */
+  grabEngineLoader?: () => Promise<GrabEngine>;
 }
 
 const IDLE: Status = { state: "idle", currentStep: null, perComment: {}, result: null, updatedAt: "" };
@@ -39,6 +42,7 @@ export function DesignCommentOverlay({
   origin = "local",
   captureScreenshot,
   author,
+  grabEngineLoader = loadGrabEngine,
 }: DesignCommentOverlayProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [status, setStatus] = useState<Status>(IDLE);
@@ -81,51 +85,61 @@ export function DesignCommentOverlay({
   );
   const running = status.state === "applying" || status.state === "queued";
 
+  const engineRef = useRef<Promise<GrabEngine> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      void engineRef.current?.then((e) => e.dispose());
+    };
+  }, []);
+
   // comment-mode: hover-highlight the element under the cursor (inspector-style),
-  // click to start a draft, Esc to exit.
+  // grab via GrabEngine to start a draft, Esc to exit.
   useEffect(() => {
     if (mode !== "selecting") {
       setHover(null);
       return;
     }
+    let disposed = false;
+    let unsub: (() => void) | undefined;
+    if (!engineRef.current) engineRef.current = grabEngineLoader();
+    void engineRef.current.then((engine) => {
+      if (disposed) return; // unmounted/exited while loading — do not subscribe
+      unsub = engine.onGrab((g: Grab) => {
+        if (g.element instanceof Element && g.element.closest("[data-rrw-host]")) return;
+        const r = g.element.getBoundingClientRect();
+        setDraft({ ...capture(g.element, { source: g.source, component: g.component }), px: r.left, py: r.top });
+        setDraftText("");
+        setDraftPos(clampToViewport({ left: r.left, top: r.top + 12 }, DRAFT_SIZE, viewport()));
+        setHover(null);
+        setMode("off");
+      });
+      engine.activate();
+    });
+
     const isUi = (t: EventTarget | null) => t instanceof Element && !!t.closest("[data-rrw-ui]");
     const onMove = (e: MouseEvent) => {
       const el = document.elementFromPoint(e.clientX, e.clientY);
-      if (!el || isUi(el)) {
-        setHover(null);
-        return;
-      }
+      if (!el || isUi(el)) return setHover(null);
       const r = el.getBoundingClientRect();
       setHover({ left: r.left, top: r.top, width: r.width, height: r.height });
-    };
-    const onClick = (e: MouseEvent) => {
-      if (isUi(e.target)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      if (!el || isUi(el)) return;
-      setDraft({ ...capture(el), px: e.clientX, py: e.clientY });
-      setDraftText("");
-      // place the draft near the click but clamped fully on-screen
-      setDraftPos(clampToViewport({ left: e.clientX, top: e.clientY + 12 }, DRAFT_SIZE, viewport()));
-      setHover(null);
-      setMode("off");
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMode("off");
     };
     document.addEventListener("mousemove", onMove, true);
-    document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKey, true);
     document.body.style.cursor = "crosshair";
     return () => {
+      disposed = true;
+      unsub?.();
+      void engineRef.current?.then((e) => e.deactivate());
       document.removeEventListener("mousemove", onMove, true);
-      document.removeEventListener("click", onClick, true);
       document.removeEventListener("keydown", onKey, true);
       document.body.style.cursor = "";
       setHover(null);
     };
-  }, [mode]);
+  }, [mode, grabEngineLoader]);
 
   const submitDraft = useCallback(async () => {
     if (!draft || !draftText.trim()) return;

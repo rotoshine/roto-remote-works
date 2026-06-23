@@ -67,17 +67,24 @@ export function inspectFiber(el: Element): { source: string | null; component: s
   }
 }
 
-/** Capture everything the bridge needs to locate the clicked element. */
-export function capture(el: Element): Captured {
+/** Capture everything the bridge needs to locate the clicked element.
+ *  An optional `override` (e.g. react-grab's getSource result) wins per-field over
+ *  fiber inspection; when a field is null we fall back to inspectFiber.
+ *  The `inspect` param is injectable for testing (defaults to inspectFiber). */
+export function capture(
+  el: Element,
+  override?: { source: string | null; component: string | null },
+  inspect: (el: Element) => { source: string | null; component: string | null } = inspectFiber,
+): Captured {
   const r = el.getBoundingClientRect();
-  const { source, component } = inspectFiber(el);
+  const fiber = inspect(el);
   return {
     selector: cssPath(el),
     tag: el.tagName.toLowerCase(),
     classes: typeof el.className === "string" ? el.className : "",
     text: (el.textContent ?? "").trim().slice(0, 200),
-    component,
-    source,
+    component: override?.component ?? fiber.component,
+    source: override?.source ?? fiber.source,
     rect: { x: r.x, y: r.y, w: r.width, h: r.height },
   };
 }
