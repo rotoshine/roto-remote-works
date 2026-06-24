@@ -19,3 +19,20 @@ export function clampToViewport(pos: Point, card: Box, viewport: Box, margin = 1
     top: Math.max(margin, Math.min(pos.top, viewport.h - card.h - margin)),
   };
 }
+
+/**
+ * Floating panels sit inside `.rrw-root` (z 2147483000), below the hover
+ * highlight (z 2147483100). A small positive base lifts a dragged panel above
+ * its auto-stacked siblings (including the FAB) while staying under the
+ * highlight. Each call hands out a strictly larger value → bring-to-front.
+ */
+export const BASE_DRAG_Z = 10;
+
+/** Make an independent monotonically-increasing z-index counter above `base`. */
+export function createZAllocator(base: number): () => number {
+  let z = base;
+  return () => ++z;
+}
+
+/** Shared bring-to-front allocator used by all draggable overlay panels. */
+export const nextZ = createZAllocator(BASE_DRAG_Z);

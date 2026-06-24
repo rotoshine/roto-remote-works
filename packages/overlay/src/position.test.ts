@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clampToViewport } from "./position";
+import { clampToViewport, createZAllocator, nextZ } from "./position";
 
 const card = { w: 288, h: 200 };
 const vp = { w: 1200, h: 800 };
@@ -25,5 +25,30 @@ describe("clampToViewport", () => {
 
   it("respects a custom margin", () => {
     expect(clampToViewport({ left: 5, top: 5 }, card, vp, 20)).toEqual({ left: 20, top: 20 });
+  });
+});
+
+describe("createZAllocator", () => {
+  it("hands out strictly increasing values starting just above the base", () => {
+    const next = createZAllocator(10);
+    expect(next()).toBe(11);
+    expect(next()).toBe(12);
+    expect(next()).toBe(13);
+  });
+
+  it("keeps independent allocators on their own counters", () => {
+    const a = createZAllocator(100);
+    const b = createZAllocator(200);
+    expect(a()).toBe(101);
+    expect(b()).toBe(201);
+    expect(a()).toBe(102);
+  });
+});
+
+describe("nextZ", () => {
+  it("hands out strictly increasing z-indexes (shared bring-to-front counter)", () => {
+    const first = nextZ();
+    const second = nextZ();
+    expect(second).toBeGreaterThan(first);
   });
 });

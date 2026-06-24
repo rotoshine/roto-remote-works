@@ -247,4 +247,85 @@ describe("DesignCommentOverlay", () => {
     await waitFor(() => expect(engine.dispose).toHaveBeenCalled());
     expect(engine.onGrab).not.toHaveBeenCalled();
   });
+
+  it("lets the comment panel be dragged by its header", async () => {
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = (() => null) as typeof document.elementFromPoint; // selecting-mode hover no-op
+    const { engine } = fakeEngine(); // avoid loading real react-grab (jsdom lacks elementsFromPoint)
+    try {
+      render(<DesignCommentOverlay client={fakeClient()} grabEngineLoader={async () => engine} />);
+      await userEvent.click(screen.getByRole("button", { name: /코멘트/ })); // opens the panel
+      const panel = () => document.querySelector(".rrw-panel") as HTMLElement;
+      const before = panel().style.left;
+      const handle = document.querySelector(".rrw-panel-head") as HTMLElement;
+      fireEvent.mouseDown(handle, { clientX: 400, clientY: 400 });
+      fireEvent.mouseMove(document, { clientX: 300, clientY: 350 }); // drag up-left
+      fireEvent.mouseUp(document);
+      expect(panel().style.left).not.toBe(before);
+    } finally {
+      document.elementFromPoint = orig;
+    }
+  });
+
+  it("lets the progress dock be dragged by its grip", async () => {
+    const client = fakeClient({
+      getStatus: async () => ({ state: "applying", currentStep: "x", perComment: {}, result: null, updatedAt: "t" }),
+      listComments: async () => [comment("c1", "make bigger", "applying")],
+    });
+    render(<DesignCommentOverlay client={client} pollMs={10} />);
+    await screen.findByText("make bigger");
+    const dock = () => document.querySelector(".rrw-dock") as HTMLElement;
+    const before = dock().style.left;
+    const handle = document.querySelector(".rrw-dock-handle") as HTMLElement;
+    fireEvent.mouseDown(handle, { clientX: 200, clientY: 400 });
+    fireEvent.mouseMove(document, { clientX: 350, clientY: 300 });
+    fireEvent.mouseUp(document);
+    expect(dock().style.left).not.toBe(before);
+  });
+
+  it("lets the result banner be dragged by its grip", async () => {
+    const client = fakeClient({
+      getStatus: async () => ({
+        state: "done", currentStep: null, perComment: {},
+        result: { ok: true, summary: "적용 완료", at: "t" }, updatedAt: "t",
+      }),
+    });
+    render(<DesignCommentOverlay client={client} pollMs={10} />);
+    await screen.findByText(/적용 완료/);
+    const banner = () => document.querySelector(".rrw-result") as HTMLElement;
+    const before = banner().style.left;
+    const handle = document.querySelector(".rrw-result-handle") as HTMLElement;
+    fireEvent.mouseDown(handle, { clientX: 600, clientY: 200 });
+    fireEvent.mouseMove(document, { clientX: 500, clientY: 300 });
+    fireEvent.mouseUp(document);
+    expect(banner().style.left).not.toBe(before);
+  });
+
+  it("brings a panel to front (higher z-index) when it is dragged", async () => {
+    const client = fakeClient({
+      getStatus: async () => ({
+        state: "done", currentStep: null, perComment: {},
+        result: { ok: true, summary: "적용 완료", at: "t" }, updatedAt: "t",
+      }),
+    });
+    const orig = document.elementFromPoint;
+    document.elementFromPoint = (() => null) as typeof document.elementFromPoint;
+    const { engine } = fakeEngine(); // avoid loading real react-grab (jsdom lacks elementsFromPoint)
+    try {
+      render(<DesignCommentOverlay client={client} pollMs={10} grabEngineLoader={async () => engine} />);
+      await screen.findByText(/적용 완료/);
+      await userEvent.click(screen.getByRole("button", { name: /코멘트/ })); // open panel too
+      const panel = document.querySelector(".rrw-panel") as HTMLElement;
+      const banner = document.querySelector(".rrw-result") as HTMLElement;
+
+      fireEvent.mouseDown(document.querySelector(".rrw-panel-head") as HTMLElement, { clientX: 400, clientY: 400 });
+      fireEvent.mouseUp(document);
+      fireEvent.mouseDown(document.querySelector(".rrw-result-handle") as HTMLElement, { clientX: 600, clientY: 200 });
+      fireEvent.mouseUp(document);
+
+      expect(Number(banner.style.zIndex)).toBeGreaterThan(Number(panel.style.zIndex));
+    } finally {
+      document.elementFromPoint = orig;
+    }
+  });
 });
