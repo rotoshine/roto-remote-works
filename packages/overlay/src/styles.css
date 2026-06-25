@@ -18,11 +18,15 @@
     border: 0;
   }
 
-  /* result banner (apply outcome / PR link) */
+  /* result banner (apply outcome / PR link) — positioned by useDraggable (inline left/top) */
   .rrw-result {
-    @apply fixed bottom-16 right-4 flex items-center gap-2 rounded-lg bg-white px-3 py-2 shadow-lg;
+    @apply flex items-center gap-2 rounded-lg bg-white px-3 py-2 shadow-lg;
     pointer-events: auto;
     max-width: 22rem;
+  }
+  .rrw-result-handle {
+    cursor: move;
+    user-select: none;
   }
   .rrw-result-icon {
     @apply text-base;
@@ -66,11 +70,13 @@
   }
 
   .rrw-panel {
-    @apply bottom-16 right-4 flex w-72 flex-col gap-2 overflow-auto;
+    @apply flex w-72 flex-col gap-2 overflow-auto;
     max-height: 60vh;
   }
   .rrw-panel-head {
     @apply flex items-center justify-between;
+    cursor: move;
+    user-select: none;
   }
   .rrw-panel-apply {
     @apply w-full;
@@ -99,10 +105,19 @@
   .rrw-draft-grip {
     @apply text-slate-400;
   }
+  /* shared grip glyph for draggable panels */
+  .rrw-drag-grip {
+    @apply text-slate-400;
+  }
 
   .rrw-dock {
-    @apply fixed bottom-16 right-4 w-72;
+    @apply fixed w-72;
     pointer-events: auto;
+  }
+  .rrw-dock-handle {
+    @apply flex justify-center rounded;
+    cursor: move;
+    user-select: none;
   }
 
   .rrw-backdrop {
